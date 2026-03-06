@@ -4,12 +4,18 @@ Authentication interface for the application
 """
 
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
+    QDialog, QVBoxLayout, QHBoxLayout, QLabel,
     QLineEdit, QPushButton, QMessageBox, QFrame, QCheckBox
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QPixmap
-from models.user import User, login
+from models.user import login
+from ui.reset_password_dialog import (
+    ResetPasswordDialog,
+    SetupMasterPasswordDialog,
+    master_password_configured
+)
+from pathlib import Path
 
 
 class LoginWindow(QDialog):
@@ -21,10 +27,31 @@ class LoginWindow(QDialog):
         super().__init__()
         self.user = None
         self.init_ui()
+        """self._ensure_master_password()"""
     
+    def _ensure_master_password(self):
+        """
+        Si no existe contraseña maestra, solicitar configurarla al arrancar.
+        Esto ocurre solo la primera vez que se abre el sistema.
+        """
+        if not master_password_configured():
+            QMessageBox.information(
+                self,
+                "Configuración inicial",
+                "👋 Bienvenido.\n\n"
+                "Para proteger el sistema, debes configurar una "
+                "contraseña maestra antes de continuar.\n\n"
+                "Esta contraseña te permitirá resetear el acceso de "
+                "cualquier usuario si alguna vez olvidas tu contraseña.",
+                QMessageBox.StandardButton.Ok
+            )
+            setup = SetupMasterPasswordDialog(self)
+            setup.exec()  # No bloqueamos si cancela — puede configurarla después
+
+
     def init_ui(self):
         """Initialize user interface"""
-        self.setWindowTitle("Restaurant POS - Login")
+        self.setWindowTitle("Cafetería La Placita - Login")
         self.setFixedSize(450, 750)
         self.setModal(True)
         
@@ -39,15 +66,35 @@ class LoginWindow(QDialog):
         title_layout.setSpacing(10)
         
         # App icon/logo
-        logo_label = QLabel("🍽️")
+        logo_label = QLabel()
         logo_font = QFont()
         logo_font.setPointSize(48)
         logo_label.setFont(logo_font)
         logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        logo_path = Path(__file__).parent.parent / "assets" / "logo_laplacita.png"
+        # Fallback: buscar en la carpeta del ejecutable también
+        if not logo_path.exists():
+            logo_path = Path(__file__).parent.parent.parent / "logo_laplacita.png"
+
+        if logo_path.exists():
+            pixmap = QPixmap(str(logo_path)).scaled(
+                140, 140,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation
+            )
+            logo_label.setPixmap(pixmap)
+        else:
+            # Fallback texto si no encuentra la imagen
+            logo_label.setText("☕")
+            logo_label.setStyleSheet("font-size: 48px;")
+
+        logo_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         title_layout.addWidget(logo_label)
-        
+
+
+
         # Title
-        title = QLabel("Restaurant POS")
+        title = QLabel("Cafetería La Placita")
         title_font = QFont()
         title_font.setPointSize(24)
         title_font.setBold(True)
@@ -66,7 +113,7 @@ class LoginWindow(QDialog):
         
         # Login form
         form_layout = QVBoxLayout()
-        form_layout.setSpacing(15)
+        form_layout.setSpacing(13)
         
         # Email field
         email_label = QLabel("Correo Electrónico")
@@ -75,7 +122,7 @@ class LoginWindow(QDialog):
         
         self.email_input = QLineEdit()
         self.email_input.setPlaceholderText("Ingrese su correo")
-        self.email_input.setText("admin@restaurant.com")  # Default for testing
+        self.email_input.setText("gabi193@restaurant.com")  # Default for testing
         self.email_input.returnPressed.connect(self.handle_login)
         form_layout.addWidget(self.email_input)
         
@@ -138,63 +185,85 @@ class LoginWindow(QDialog):
                 padding: 15px;
             }
         """)
-        
-        # Footer
+
+        # ── Botón ¿Olvidaste tu contraseña? ───────────────────────────
+        forgot_btn = QPushButton("¿Olvidaste tu contraseña?")
+        forgot_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                color: #6B7280;
+                border: none;
+                font-size: 12px;
+                text-decoration: underline;
+                padding: 4px;
+            }
+            QPushButton:hover  { color: #FF6B35; }
+            QPushButton:pressed { color: #CC4E24; }
+        """)
+        forgot_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        forgot_btn.clicked.connect(self.handle_forgot_password)
+        layout.addWidget(forgot_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        # ── Footer ────────────────────────────────────────────────────
         layout.addStretch()
-        footer = QLabel("© 2025 Restaurant POS - Versión 1.0")
+        footer = QLabel("© 2025 Cafetería La Placita - v1.0")
         footer.setStyleSheet("color: #9CA3AF; font-size: 11px;")
         footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(footer)
-        
+
         self.setLayout(layout)
-        
-        # Apply card style to dialog
-        self.setStyleSheet("""
-            QDialog {
-                background-color: white;
-                border-radius: 16px;
-            }
-        """)
+        self.setStyleSheet("QDialog { background-color: white; border-radius: 16px; }")
+
+        # ── Handlers ──────────────────────────────────────────────────────
+
     def toggle_password_visibility(self, state):
-        """Show/Hide password text"""
         if state == Qt.CheckState.Checked.value:
             self.password_input.setEchoMode(QLineEdit.EchoMode.Normal)
         else:
             self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
-    
+
     def handle_login(self):
-        """Handle login button click"""
-        email = self.email_input.text().strip()
+        """Intentar autenticación con email y contraseña."""
+        email    = self.email_input.text().strip()
         password = self.password_input.text().strip()
-        
-        # Validate inputs
+
         if not email or not password:
-            QMessageBox.warning(
-                self,
-                "Error de Login",
-                "Por favor ingrese su correo y contraseña"
-            )
+            QMessageBox.warning(self, "Error", "Por favor ingrese su correo y contraseña.")
             return
-        
-        # Attempt authentication
+
         user = login(email, password)
-        
+
         if user:
             self.user = user
             self.login_successful.emit(user)
             self.accept()
         else:
             QMessageBox.critical(
-                self,
-                "Error de Login",
-                "Correo o contraseña incorrectos.\n"
-                "Por favor intente nuevamente."
+                self, "Error de Login",
+                "Correo o contraseña incorrectos.\nPor favor intente nuevamente."
             )
             self.password_input.clear()
             self.password_input.setFocus()
-    
+
+    def handle_forgot_password(self):
+        """Abrir diálogo de reseteo de contraseña."""
+        if not master_password_configured():
+            reply = QMessageBox.question(
+                self,
+                "Contraseña maestra no configurada",
+                "Aún no tienes una contraseña maestra configurada.\n"
+                "¿Deseas configurarla ahora?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                setup = SetupMasterPasswordDialog(self)
+                setup.exec()
+            return
+
+        dialog = ResetPasswordDialog(self)
+        dialog.exec()
+
     def get_user(self):
-        """Get authenticated user"""
         return self.user
 
 
@@ -202,21 +271,19 @@ if __name__ == '__main__':
     from PySide6.QtWidgets import QApplication
     from pathlib import Path
     import sys
-    
+
     app = QApplication(sys.argv)
-    
-    # Load stylesheet with correct path
+
     style_path = Path(__file__).parent / 'styles' / 'material_style.qss'
     if style_path.exists():
         with open(style_path, 'r', encoding='utf-8') as f:
             app.setStyleSheet(f.read())
-        print("✓ Styles loaded")
-    
+
     login_window = LoginWindow()
     if login_window.exec() == QDialog.DialogCode.Accepted:
         user = login_window.get_user()
-        print(f"✓ Login successful: {user.nombre} ({user.rol})")
+        print(f"✓ Login exitoso: {user.nombre} ({user.rol})")
     else:
-        print("Login cancelled")
-    
+        print("Login cancelado")
+
     sys.exit()
