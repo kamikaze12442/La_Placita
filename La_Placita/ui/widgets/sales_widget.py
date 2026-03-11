@@ -284,7 +284,7 @@ class SalesWidget(QWidget):
         self.metodo_filter.addItem("Todos los métodos", None)
         self.metodo_filter.addItem("💵 Efectivo", "efectivo")
         self.metodo_filter.addItem("💱 QR", "qr")
-        self.metodo_filter.addItem("💳 Tarjeta", "tarjeta")
+        self.metodo_filter.addItem("⚡ Mixto", "mixto")
         metodo_container.addWidget(metodo_label)
         metodo_container.addWidget(self.metodo_filter)
         row1.addLayout(metodo_container)
@@ -569,8 +569,9 @@ class SalesWidget(QWidget):
             # Método
             metodos = {
                 'efectivo': '💵 Efectivo',
-                'qr': '💱 QR',
-                'tarjeta': '💳 Tarjeta'
+                'qr':       '💱 QR',
+                'tarjeta':  '💳 Tarjeta',
+                'mixto':    '⚡ Mixto',     # ← agregar esta línea
             }
             metodo_item = QTableWidgetItem(metodos.get(sale['metodo_pago'], sale['metodo_pago']))
             self.table.setItem(row, 5, metodo_item)

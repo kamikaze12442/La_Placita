@@ -633,21 +633,21 @@ class FinanceWidget(QWidget):
         
         # Get product details grouped by category with optional filter
         selected_category_id = self.category_combo.currentData()
-
+        
         query_products = """
-            SELECT 
-                c.nombre as categoria,
-                p.nombre as producto,
-                p.costo as costo_unitario,
-                SUM(dv.cantidad) as unidades_vendidas,
-                SUM(dv.subtotal) as ingresos,
-                SUM(dv.cantidad * p.costo) as gastos
-            FROM detalle_ventas dv
-            JOIN productos p ON dv.producto_id = p.id
-            JOIN categorias c ON p.categoria_id = c.id
-            JOIN ventas v ON dv.venta_id = v.id
-            WHERE strftime('%Y-%m', v.fecha_venta) = ? AND v.estado = 'completada'
-        """
+    SELECT 
+        COALESCE(c.nombre, 'Sin categoría') as categoria,
+        p.nombre as producto,
+        p.costo as costo_unitario,
+        SUM(dv.cantidad) as unidades_vendidas,
+        SUM(dv.subtotal) as ingresos,
+        SUM(dv.cantidad * p.costo) as gastos
+    FROM detalle_ventas dv
+    JOIN productos p ON dv.producto_id = p.id
+    LEFT JOIN categorias c ON p.categoria_id = c.id
+    JOIN ventas v ON dv.venta_id = v.id
+    WHERE strftime('%Y-%m', v.fecha_venta) = ? AND v.estado = 'completada'
+"""
 
         # Add category filter if selected
         params = [month_str]

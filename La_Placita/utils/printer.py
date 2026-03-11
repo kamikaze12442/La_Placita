@@ -26,6 +26,8 @@ DOUBLE_ON     = GS  + b'!\x11'      # doble alto + doble ancho
 DOUBLE_OFF    = GS  + b'!\x00'
 FEED_3        = b'\n\n\n'
 CUT           = GS  + b'V\x41\x00'  # corte parcial
+DRAWER_PIN2   = ESC + b'p\x00\x19\xfa'  # abrir cajón — pin 2 (más común)
+DRAWER_PIN5   = ESC + b'p\x01\x19\xfa'  # abrir cajón — pin 5 (alternativo)
 
 
 def _encode(texto: str) -> bytes:
@@ -33,7 +35,8 @@ def _encode(texto: str) -> bytes:
     return texto.encode("cp437", errors="replace")
 
 
-def _build_recibo(sale, nombre_negocio, subtitulo, telefono, mensaje_pie) -> bytes:
+def _build_recibo(sale, nombre_negocio, subtitulo, telefono, mensaje_pie,
+                  abrir_cajon: bool = False) -> bytes:
     """Construye el recibo completo como bytes ESC/POS."""
     ANCHO = 32
     buf = bytearray()
@@ -104,6 +107,12 @@ def _build_recibo(sale, nombre_negocio, subtitulo, telefono, mensaje_pie) -> byt
 
     add(FEED_3)
     add(CUT)
+
+    # ── Cajón de dinero ───────────────────────────────────────────────
+    # Solo se abre si el pago fue en efectivo o mixto (no en QR/tarjeta)
+    metodo = getattr(sale, 'metodo_pago', '') or ''
+    if abrir_cajon and metodo.lower() in ('efectivo', 'mixto'):
+        add(DRAWER_PIN2)
 
     return bytes(buf)
 
@@ -192,10 +201,16 @@ def imprimir_recibo(sale,
                     nombre_negocio: str = "Cafeteria La Placita",
                     subtitulo: str = "Sucursal Santa Fe",
                     telefono: str = "",
-                    mensaje_pie: str = "Gracias por su visita!\nVuelva pronto") -> tuple:
-    """Imprime el recibo de una venta."""
+                    mensaje_pie: str = "Gracias por su visita!\nVuelva pronto",
+                    abrir_cajon: bool = True) -> tuple:
+    """
+    Imprime el recibo de una venta.
+    abrir_cajon=True  → envía señal al drawer después del corte
+                        (solo actúa si el método de pago es efectivo o mixto)
+    """
     try:
-        data = _build_recibo(sale, nombre_negocio, subtitulo, telefono, mensaje_pie)
+        data = _build_recibo(sale, nombre_negocio, subtitulo, telefono,
+                             mensaje_pie, abrir_cajon)
         return _imprimir_bytes(data)
     except Exception as e:
         return False, f"Error generando recibo: {e}"

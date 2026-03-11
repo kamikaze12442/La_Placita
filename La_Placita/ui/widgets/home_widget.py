@@ -649,7 +649,8 @@ class HomeWidget(QWidget):
             metodo_icons = {
                 'efectivo': '💵 Efectivo',
                 'qr': '💱 QR',
-                'tarjeta': '💳 Tarjeta'
+                'tarjeta': '💳 Tarjeta',
+                'mixto': '⚡ Mixto'
             }
             metodo_item = QTableWidgetItem(metodo_icons.get(sale['metodo_pago'], sale['metodo_pago']))
             table.setItem(row, 4, metodo_item)
