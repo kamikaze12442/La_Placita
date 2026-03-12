@@ -15,7 +15,6 @@ from models.product import Product, Category
 from models.sale import Sale, SaleDetail
 from models.user import get_current_user
 from models.arqueo import ArqueoCaja
-
 try:
     from utils.printer import imprimir_recibo
     PRINTER_OK = True
@@ -228,15 +227,17 @@ class POSWidget(QWidget):
         self.cart_table.setHorizontalHeaderLabels(["Producto", "Cant.", "Precio", "Total", ""])
 
         hh = self.cart_table.horizontalHeader()
-        hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         hh.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
         hh.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
         hh.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
         hh.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
-        self.cart_table.setColumnWidth(1, 58)
-        self.cart_table.setColumnWidth(2, 72)
-        self.cart_table.setColumnWidth(3, 72)
-        self.cart_table.setColumnWidth(4, 32)
+        self.cart_table.setColumnWidth(1, 60)
+        self.cart_table.setColumnWidth(2, 68)
+        self.cart_table.setColumnWidth(3, 68)
+        self.cart_table.setColumnWidth(4, 28)
+        self.cart_table.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
 
         self.cart_table.verticalHeader().setVisible(False)
         self.cart_table.verticalHeader().setDefaultSectionSize(38)
@@ -511,9 +512,9 @@ class POSWidget(QWidget):
             spin_lay.setContentsMargins(2, 1, 2, 1)
             spin_lay.setAlignment(Qt.AlignmentFlag.AlignCenter)
             qty_spin = QSpinBox()
-            qty_spin.setRange(1, 999)
+            qty_spin.setRange(0, 999)
             qty_spin.setValue(item.cantidad)
-            qty_spin.setFixedSize(52, 26)
+            qty_spin.setFixedSize(52, 32)
             qty_spin.setStyleSheet("""
                 QSpinBox {
                     border: 1px solid #E2E8F0; border-radius: 5px;
@@ -544,7 +545,7 @@ class POSWidget(QWidget):
             rm_lay.setContentsMargins(2, 2, 2, 2)
             rm_lay.setAlignment(Qt.AlignmentFlag.AlignCenter)
             rm_btn = QPushButton("✕")
-            rm_btn.setFixedSize(24, 24)
+            rm_btn.setFixedSize(18, 18)
             rm_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             rm_btn.setStyleSheet("""
                 QPushButton { background:#FEE2E2; color:#EF4444; border:none;
@@ -559,8 +560,11 @@ class POSWidget(QWidget):
 
     def update_quantity(self, index: int, quantity: int):
         if 0 <= index < len(self.cart_items):
-            self.cart_items[index].cantidad = quantity
-            self.cart_items[index].calculate_subtotal()
+            if quantity < 1:
+                self.cart_items.pop(index)
+            else:
+                self.cart_items[index].cantidad = quantity
+                self.cart_items[index].calculate_subtotal()
             self.update_cart_display()
 
     def remove_from_cart(self, index: int):
