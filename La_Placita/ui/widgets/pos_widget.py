@@ -1,11 +1,6 @@
 """
-POS Widget
-ACTUALIZADO:
-  - Impresión térmica al completar venta
-  - Pago Efectivo / QR / Tarjeta / Mixto (Efectivo + QR)
-  - Cálculo de cambio a dar
-  - Sin subtotal, solo TOTAL
-  - Bloquea "Completar Venta" si no hay caja abierta
+POS Widget - La Placita
+Métodos de pago: Efectivo / QR / Mixto
 """
 
 from PySide6.QtWidgets import (
@@ -15,7 +10,7 @@ from PySide6.QtWidgets import (
     QScrollArea, QHeaderView, QButtonGroup, QAbstractItemView
 )
 from PySide6.QtCore import Qt, Signal, QTimer
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QColor
 from models.product import Product, Category
 from models.sale import Sale, SaleDetail
 from models.user import get_current_user
@@ -171,27 +166,104 @@ class POSWidget(QWidget):
         cart_title.setStyleSheet("font-size: 18px; font-weight: bold; color: #1F2937;")
         right_layout.addWidget(cart_title)
 
-        # Tabla carrito — ocupa todo el espacio vertical disponible
+        # ── Chips: tipo de pedido ─────────────────────────────────────
+        tipo_frame = QFrame()
+        tipo_frame.setStyleSheet("""
+            QFrame { background: #F8FAFC; border: 1px solid #E2E8F0;
+                     border-radius: 10px; }
+        """)
+        tipo_lay = QHBoxLayout(tipo_frame)
+        tipo_lay.setContentsMargins(10, 8, 10, 8)
+        tipo_lay.setSpacing(8)
+
+        self._tipo_group = QButtonGroup(self)
+        self._tipo_group.setExclusive(True)
+
+        tipo_chip_style = """
+            QPushButton {{
+                background: {bg}; border: 2px solid {border};
+                border-radius: 8px; font-size: 13px; font-weight: 700;
+                color: {color}; padding: 8px 0px;
+            }}
+            QPushButton:hover:!checked {{ border-color: {hover}; color: {hover}; background: {hbg}; }}
+        """
+        for label, key, emoji, active_bg, active_border, active_color, idle_hover, idle_hbg in [
+            ("Para llevar", "llevar", "🥡",
+             "#FFF7ED", "#FF6B35", "#FF6B35", "#FF6B35", "#FFF5F0"),
+            ("En mesa",     "mesa",  "🍽️",
+             "#EFF6FF", "#3B82F6", "#3B82F6", "#3B82F6", "#F0F7FF"),
+        ]:
+            btn = QPushButton(f"{emoji}  {label}")
+            btn.setCheckable(True)
+            btn.setProperty("tipo_key", key)
+            btn.setSizePolicy(
+                btn.sizePolicy().horizontalPolicy(),
+                btn.sizePolicy().verticalPolicy()
+            )
+            # estilo base (no marcado)
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: white; border: 2px solid #E2E8F0;
+                    border-radius: 8px; font-size: 13px; font-weight: 600;
+                    color: #6B7280; padding: 8px 0px;
+                }}
+                QPushButton:checked {{
+                    background: {active_bg}; border-color: {active_border};
+                    color: {active_color};
+                }}
+                QPushButton:hover:!checked {{
+                    border-color: {idle_hover}; color: {idle_hover};
+                    background: {idle_hbg};
+                }}
+            """)
+            if key == "mesa":
+                btn.setChecked(True)
+            self._tipo_group.addButton(btn)
+            tipo_lay.addWidget(btn)
+
+        right_layout.addWidget(tipo_frame)
+
+        # ── Tabla carrito ─────────────────────────────────────────────
         self.cart_table = QTableWidget(0, 5)
         self.cart_table.setHorizontalHeaderLabels(["Producto", "Cant.", "Precio", "Total", ""])
-        self.cart_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self.cart_table.setColumnWidth(1, 50)
-        self.cart_table.setColumnWidth(2, 75)
-        self.cart_table.setColumnWidth(3, 75)
-        self.cart_table.setColumnWidth(4, 36)
+
+        hh = self.cart_table.horizontalHeader()
+        hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+        hh.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+        hh.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+        hh.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
+        self.cart_table.setColumnWidth(1, 58)
+        self.cart_table.setColumnWidth(2, 72)
+        self.cart_table.setColumnWidth(3, 72)
+        self.cart_table.setColumnWidth(4, 32)
+
         self.cart_table.verticalHeader().setVisible(False)
-        self.cart_table.verticalHeader().setDefaultSectionSize(46)
+        self.cart_table.verticalHeader().setDefaultSectionSize(38)
         self.cart_table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self.cart_table.setShowGrid(False)
+        self.cart_table.setAlternatingRowColors(True)
         self.cart_table.setStyleSheet("""
-            QTableWidget { border: 1px solid #E5E7EB; border-radius: 8px;
-                           background: white; font-size: 12px; }
-            QHeaderView::section { background: #F9FAFB; color: #6B7280;
-                font-weight: 600; padding: 6px; border: none;
-                border-bottom: 1px solid #E5E7EB; }
+            QTableWidget {
+                border: 1px solid #E5E7EB; border-radius: 8px;
+                background: white; font-size: 12px;
+                gridline-color: transparent; outline: none;
+            }
+            QTableWidget::item { padding: 2px 6px; color: #1F2937; }
+            QTableWidget::item:alternate { background: #F9FAFB; }
+            QHeaderView::section {
+                background: #F1F5F9; color: #6B7280;
+                font-weight: 700; font-size: 11px;
+                padding: 5px 6px; border: none;
+                border-bottom: 1px solid #E2E8F0;
+            }
+            QScrollBar:vertical { background:#F1F5F9; width:6px; border-radius:3px; }
+            QScrollBar::handle:vertical { background:#CBD5E1; border-radius:3px; min-height:20px; }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height:0px; }
         """)
         right_layout.addWidget(self.cart_table, stretch=1)
 
-        # ── Panel de pago ──────────────────────────────────────────────
+        # ── Panel de pago ─────────────────────────────────────────────
         pay_frame = QFrame()
         pay_frame.setStyleSheet("""
             QFrame { background: #F9FAFB; border: 1px solid #E5E7EB;
@@ -217,7 +289,7 @@ class POSWidget(QWidget):
         client_row.addWidget(self.client_input)
         pay_layout.addLayout(client_row)
 
-        # Método de pago: chips
+        # Método de pago
         method_row = QHBoxLayout()
         method_row.setSpacing(5)
         method_lbl = QLabel("Pago:")
@@ -234,8 +306,7 @@ class POSWidget(QWidget):
             QPushButton:checked { background:#FF6B35; border-color:#FF6B35; color:white; }
             QPushButton:hover:!checked { border-color:#FF6B35; color:#FF6B35; }
         """
-        for label, key in [("💵 Efectivo", "efectivo"), ("📱 QR", "qr"),
-                            ("💳 Tarjeta", "tarjeta"),  ("⚡ Mixto", "mixto")]:
+        for label, key in [("💵 Efectivo", "efectivo"), ("📱 QR", "qr"), ("⚡ Mixto", "mixto")]:
             btn = QPushButton(label)
             btn.setCheckable(True)
             btn.setProperty("pay_key", key)
@@ -254,7 +325,7 @@ class POSWidget(QWidget):
             QDoubleSpinBox:focus { border-color:#10B981; }
         """
 
-        # Fila efectivo recibido
+        # Fila efectivo
         self._eff_row = QHBoxLayout()
         self._eff_lbl = QLabel("Recibido:")
         self._eff_lbl.setFixedWidth(72)
@@ -269,7 +340,7 @@ class POSWidget(QWidget):
         self._eff_row.addWidget(self._eff_spin)
         pay_layout.addLayout(self._eff_row)
 
-        # Fila QR (solo en modo Mixto)
+        # Fila QR (solo modo Mixto)
         self._qr_row = QHBoxLayout()
         self._qr_lbl = QLabel("QR:")
         self._qr_lbl.setFixedWidth(72)
@@ -288,7 +359,7 @@ class POSWidget(QWidget):
 
         right_layout.addWidget(pay_frame)
 
-        # ── Totales ────────────────────────────────────────────────────
+        # ── Totales ───────────────────────────────────────────────────
         totals_frame = QFrame()
         totals_frame.setStyleSheet("""
             QFrame { background: #FFF7ED; border: 1.5px solid #FED7AA;
@@ -303,16 +374,13 @@ class POSWidget(QWidget):
         total_title.setStyleSheet("font-size:15px; font-weight:700; color:#1F2937;")
         total_row.addWidget(total_title)
         self.total_label = QLabel("Bs 0.00")
-        self.total_label.setStyleSheet(
-            "font-size:22px; font-weight:800; color:#FF6B35;")
+        self.total_label.setStyleSheet("font-size:22px; font-weight:800; color:#FF6B35;")
         self.total_label.setAlignment(Qt.AlignmentFlag.AlignRight)
         total_row.addWidget(self.total_label)
         totals_layout.addLayout(total_row)
 
-        # Cambio a dar
         self._cambio_frame = QFrame()
-        self._cambio_frame.setStyleSheet(
-            "QFrame { background:#10B981; border-radius:7px; }")
+        self._cambio_frame.setStyleSheet("QFrame { background:#10B981; border-radius:7px; }")
         cambio_inner = QHBoxLayout(self._cambio_frame)
         cambio_inner.setContentsMargins(10, 6, 10, 6)
         cambio_title = QLabel("💰 Cambio a dar:")
@@ -327,7 +395,7 @@ class POSWidget(QWidget):
 
         right_layout.addWidget(totals_frame)
 
-        # ── Botones ────────────────────────────────────────────────────
+        # ── Botones ───────────────────────────────────────────────────
         buttons_layout = QHBoxLayout()
 
         clear_btn = QPushButton("🗑️ Limpiar")
@@ -366,6 +434,12 @@ class POSWidget(QWidget):
             if btn.isChecked():
                 return btn.property("pay_key")
         return "efectivo"
+
+    def _current_tipo(self) -> str:
+        for btn in self._tipo_group.buttons():
+            if btn.isChecked():
+                return btn.property("tipo_key")
+        return "mesa"
 
     def _on_method_changed(self, _=None):
         method = self._current_method()
@@ -426,30 +500,60 @@ class POSWidget(QWidget):
     def update_cart_display(self):
         self.cart_table.setRowCount(len(self.cart_items))
         for i, item in enumerate(self.cart_items):
-            self.cart_table.setItem(i, 0, QTableWidgetItem(item.producto_nombre))
 
+            name_item = QTableWidgetItem(item.producto_nombre)
+            name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self.cart_table.setItem(i, 0, name_item)
+
+            spin_container = QWidget()
+            spin_container.setStyleSheet("background: transparent;")
+            spin_lay = QHBoxLayout(spin_container)
+            spin_lay.setContentsMargins(2, 1, 2, 1)
+            spin_lay.setAlignment(Qt.AlignmentFlag.AlignCenter)
             qty_spin = QSpinBox()
             qty_spin.setRange(1, 999)
             qty_spin.setValue(item.cantidad)
+            qty_spin.setFixedSize(52, 26)
+            qty_spin.setStyleSheet("""
+                QSpinBox {
+                    border: 1px solid #E2E8F0; border-radius: 5px;
+                    background: white; font-size: 12px; font-weight: 600;
+                    color: #1F2937; padding: 0px 2px;
+                }
+                QSpinBox:focus { border-color: #FF6B35; }
+                QSpinBox::up-button, QSpinBox::down-button { width: 16px; }
+            """)
             qty_spin.valueChanged.connect(lambda val, idx=i: self.update_quantity(idx, val))
-            self.cart_table.setCellWidget(i, 1, qty_spin)
+            spin_lay.addWidget(qty_spin)
+            self.cart_table.setCellWidget(i, 1, spin_container)
 
             price_item = QTableWidgetItem(f"Bs {item.precio_unitario:.2f}")
             price_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            price_item.setFlags(price_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.cart_table.setItem(i, 2, price_item)
 
             sub_item = QTableWidgetItem(f"Bs {item.subtotal:.2f}")
             sub_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            sub_item.setFlags(sub_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            sub_item.setForeground(QColor("#10B981"))
             self.cart_table.setItem(i, 3, sub_item)
 
+            rm_container = QWidget()
+            rm_container.setStyleSheet("background: transparent;")
+            rm_lay = QHBoxLayout(rm_container)
+            rm_lay.setContentsMargins(2, 2, 2, 2)
+            rm_lay.setAlignment(Qt.AlignmentFlag.AlignCenter)
             rm_btn = QPushButton("✕")
+            rm_btn.setFixedSize(24, 24)
+            rm_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             rm_btn.setStyleSheet("""
                 QPushButton { background:#FEE2E2; color:#EF4444; border:none;
                               border-radius:5px; font-weight:700; font-size:11px; }
                 QPushButton:hover { background:#EF4444; color:white; }
             """)
             rm_btn.clicked.connect(lambda checked=False, idx=i: self.remove_from_cart(idx))
-            self.cart_table.setCellWidget(i, 4, rm_btn)
+            rm_lay.addWidget(rm_btn)
+            self.cart_table.setCellWidget(i, 4, rm_container)
 
         self.update_totals()
 
@@ -480,33 +584,34 @@ class POSWidget(QWidget):
         total = sum(item.subtotal for item in self.cart_items)
         self.total_label.setText(f"Bs {total:.2f}")
 
-        method   = self._current_method()
-        pago_ok  = True
+        method      = self._current_method()
+        pago_ok     = False
         show_cambio = False
 
-        if method == "efectivo":
-            rec = self._eff_spin.value()
-            if rec > 0:
-                cambio  = max(rec - total, 0)
-                pago_ok = rec >= total
-                show_cambio = True
-                color = "#10B981" if pago_ok else "#EF4444"
-                self._cambio_frame.setStyleSheet(
-                    f"QFrame {{ background:{color}; border-radius:7px; }}")
-                self._cambio_val.setText(f"Bs {cambio:.2f}")
+        if method == "qr":
+            pago_ok = True
+
+        elif method == "efectivo":
+            rec         = self._eff_spin.value()
+            pago_ok     = rec >= total and total > 0
+            cambio      = max(rec - total, 0)
+            show_cambio = True
+            color = "#10B981" if pago_ok else "#EF4444"
+            self._cambio_frame.setStyleSheet(
+                f"QFrame {{ background:{color}; border-radius:7px; }}")
+            self._cambio_val.setText(f"Bs {cambio:.2f}")
 
         elif method == "mixto":
-            eff  = self._eff_spin.value()
-            qr   = self._qr_spin.value()
-            suma = eff + qr
-            if suma > 0:
-                cambio  = max(suma - total, 0)
-                pago_ok = suma >= total
-                show_cambio = True
-                color = "#10B981" if pago_ok else "#EF4444"
-                self._cambio_frame.setStyleSheet(
-                    f"QFrame {{ background:{color}; border-radius:7px; }}")
-                self._cambio_val.setText(f"Bs {cambio:.2f}")
+            eff         = self._eff_spin.value()
+            qr          = self._qr_spin.value()
+            suma        = eff + qr
+            pago_ok     = suma >= total and total > 0
+            cambio      = max(suma - total, 0)
+            show_cambio = True
+            color = "#10B981" if pago_ok else "#EF4444"
+            self._cambio_frame.setStyleSheet(
+                f"QFrame {{ background:{color}; border-radius:7px; }}")
+            self._cambio_val.setText(f"Bs {cambio:.2f}")
 
         self._cambio_frame.setVisible(show_cambio)
 
@@ -516,7 +621,7 @@ class POSWidget(QWidget):
         if hay_items and not self._caja_abierta:
             self._hint.setText(
                 "⚠️ Abre la caja primero en Arqueo de Caja\npara poder completar una venta.")
-        elif not pago_ok:
+        elif hay_items and not pago_ok:
             self._hint.setText("⚠️ El monto recibido es menor al total.")
         else:
             self._hint.setText("")
@@ -536,14 +641,26 @@ class POSWidget(QWidget):
             self.update_totals()
             return
 
-        cliente     = self.client_input.text().strip() or "Cliente General"
-        method      = self._current_method()
+        cliente = self.client_input.text().strip() or "Cliente General"
+        method  = self._current_method()
+
+        # Calcular montos por método para ventas mixtas
+        monto_efectivo = 0.0
+        monto_qr       = 0.0
+        if method == "mixto":
+            monto_efectivo = self._eff_spin.value()
+            monto_qr       = self._qr_spin.value()
+
+        tipo_pedido = self._current_tipo()
 
         sale_id = Sale.create(
             usuario_id=self.current_user.id,
             items=self.cart_items,
             cliente=cliente,
-            metodo_pago=method
+            metodo_pago=method,
+            monto_efectivo=monto_efectivo,
+            monto_qr=monto_qr,
+            tipo_pedido=tipo_pedido,
         )
 
         if not sale_id:
@@ -554,9 +671,12 @@ class POSWidget(QWidget):
         sale  = Sale.get_by_id(sale_id)
         total = sale.total
 
+        tipo_emoji = "🥡" if tipo_pedido == "llevar" else "🍽️"
+        tipo_label = "Para llevar" if tipo_pedido == "llevar" else "En mesa"
         msg = (f"✅ Venta completada exitosamente!\n\n"
                f"Factura: {sale.numero_factura}\n"
-               f"Total:   Bs {total:.2f}\n")
+               f"Total:   Bs {total:.2f}\n"
+               f"Tipo:    {tipo_emoji} {tipo_label}\n")
 
         if method == "efectivo":
             rec    = self._eff_spin.value()
@@ -588,6 +708,10 @@ class POSWidget(QWidget):
         self.client_input.clear()
         self._eff_spin.setValue(0)
         self._qr_spin.setValue(0)
+        # Resetear tipo a "mesa"
+        for btn in self._tipo_group.buttons():
+            if btn.property("tipo_key") == "mesa":
+                btn.setChecked(True)
         self.update_cart_display()
         self.load_products()
 

@@ -6,7 +6,7 @@ Handles sales and sale details management
 from typing import Optional, List, Tuple
 from datetime import datetime, date
 from database.connection import db
-
+import traceback
 
 class SaleDetail:
     """Sale detail model (items in a sale)"""
@@ -36,7 +36,9 @@ class Sale:
                  usuario_id: int = None, cliente: str = "Cliente General",
                  subtotal: float = 0, descuento: float = 0, total: float = 0,
                  metodo_pago: str = "efectivo", estado: str = "completada",
-                 fecha_venta: str = None, items: List[SaleDetail] = None):
+                 fecha_venta: str = None, items: List[SaleDetail] = None,
+                 monto_efectivo: float = 0, monto_qr: float = 0,
+                 tipo_pedido: str = "mesa", **kwargs):
         self.id = id
         self.numero_factura = numero_factura
         self.usuario_id = usuario_id
@@ -48,6 +50,9 @@ class Sale:
         self.estado = estado
         self.fecha_venta = fecha_venta or datetime.now().isoformat()
         self.items = items or []
+        self.monto_efectivo = monto_efectivo
+        self.monto_qr       = monto_qr
+        self.tipo_pedido    = tipo_pedido
     
     @staticmethod
     def generate_invoice_number() -> str:
@@ -75,29 +80,42 @@ class Sale:
         return f"FACT-{date_part}-{new_number:04d}"
     
     @staticmethod
-    def create(usuario_id: int, items: List[SaleDetail], 
+    def create(usuario_id: int, items: List[SaleDetail],
                cliente: str = "Cliente General", metodo_pago: str = "efectivo",
-               descuento: float = 0) -> Optional[int]:
+               descuento: float = 0,
+               monto_efectivo: float = 0, monto_qr: float = 0,
+               tipo_pedido: str = "mesa") -> Optional[int]:
         """Create new sale with items"""
         try:
             # Generate invoice number
             numero_factura = Sale.generate_invoice_number()
-            
+
             # Calculate totals
             subtotal = sum(item.subtotal for item in items)
             total = subtotal - descuento
-            
+
+            # Para ventas no-mixtas, deducir los montos automáticamente
+            if metodo_pago == "efectivo":
+                monto_efectivo = total
+                monto_qr       = 0.0
+            elif metodo_pago == "qr":
+                monto_efectivo = 0.0
+                monto_qr       = total
+            # mixto: usa los valores recibidos tal cual
+
             # Insert sale
             sale_query = """
-                INSERT INTO ventas 
-                (numero_factura, usuario_id, cliente, subtotal, descuento, 
-                 total, metodo_pago, estado, fecha_venta)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO ventas
+                (numero_factura, usuario_id, cliente, subtotal, descuento,
+                 total, metodo_pago, estado, fecha_venta, monto_efectivo, monto_qr,
+                 tipo_pedido)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
             sale_id = db.execute_query(
                 sale_query,
                 (numero_factura, usuario_id, cliente, subtotal, descuento,
-                 total, metodo_pago, "completada", datetime.now().isoformat())
+                 total, metodo_pago, "completada", datetime.now().isoformat(),
+                 monto_efectivo, monto_qr, tipo_pedido)
             )
             
             # Insert sale details
@@ -122,9 +140,10 @@ class Sale:
             
             print(f"✓ Sale created: {numero_factura} - Total: Bs {total:.2f}")
             return sale_id
-            
+        
         except Exception as e:
             print(f"✗ Error creating sale: {e}")
+            traceback.print_exc()   # ← agrega esta línea
             return None
     
     @staticmethod
@@ -171,7 +190,10 @@ class Sale:
                 metodo_pago=sale_row['metodo_pago'],
                 estado=sale_row['estado'],
                 fecha_venta=sale_row['fecha_venta'],
-                items=items
+                items=items,
+                monto_efectivo=float(sale_row['monto_efectivo'] or 0),
+                monto_qr=float(sale_row['monto_qr'] or 0),
+                tipo_pedido=sale_row['tipo_pedido'] or 'mesa',
             )
             
         except Exception as e:

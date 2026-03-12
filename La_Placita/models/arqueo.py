@@ -103,19 +103,31 @@ class ArqueoCaja:
     @staticmethod
     def calcular_ventas_sistema(usuario_id: int, fecha_inicio: str) -> dict:
         """
-        Calcula las ventas del sistema desde la apertura de caja
-        hasta ahora, filtradas por el cajero que abrió la caja.
+        Calcula las ventas del sistema desde la apertura de caja.
+        Las ventas mixtas se distribuyen en efectivo/QR usando
+        monto_efectivo y monto_qr guardados en cada venta.
         """
         query = """
             SELECT
-                COALESCE(SUM(CASE WHEN metodo_pago='efectivo' THEN total ELSE 0 END), 0) as efectivo,
-                COALESCE(SUM(CASE WHEN metodo_pago='qr'       THEN total ELSE 0 END), 0) as qr,
-                COALESCE(SUM(CASE WHEN metodo_pago='tarjeta'  THEN total ELSE 0 END), 0) as tarjeta,
-                COALESCE(SUM(total), 0) as total,
-                COUNT(*) as transacciones
+                -- Efectivo puro + porción efectivo de ventas mixtas
+                COALESCE(SUM(
+                    CASE WHEN metodo_pago = 'efectivo' THEN total
+                         WHEN metodo_pago = 'mixto'   THEN COALESCE(monto_efectivo, 0)
+                         ELSE 0 END
+                ), 0) AS efectivo,
+
+                -- QR puro + porción QR de ventas mixtas
+                COALESCE(SUM(
+                    CASE WHEN metodo_pago = 'qr'    THEN total
+                         WHEN metodo_pago = 'mixto' THEN COALESCE(monto_qr, 0)
+                         ELSE 0 END
+                ), 0) AS qr,
+
+                COALESCE(SUM(total), 0) AS total,
+                COUNT(*)                AS transacciones
             FROM ventas
             WHERE usuario_id = ?
-              AND estado = 'completada'
+              AND estado     = 'completada'
               AND fecha_venta >= ?
         """
         row = db.fetch_one(query, (usuario_id, fecha_inicio))
@@ -123,11 +135,10 @@ class ArqueoCaja:
             return {
                 'efectivo':      float(row['efectivo']),
                 'qr':            float(row['qr']),
-                'tarjeta':       float(row['tarjeta']),
                 'total':         float(row['total']),
                 'transacciones': int(row['transacciones']),
             }
-        return {'efectivo': 0, 'qr': 0, 'tarjeta': 0, 'total': 0, 'transacciones': 0}
+        return {'efectivo': 0, 'qr': 0, 'total': 0, 'transacciones': 0}
 
     @staticmethod
     def cerrar(arqueo_id: int, conteo_efectivo: float, conteo_qr: float,
@@ -144,24 +155,23 @@ class ArqueoCaja:
 
         dif_ef  = round(conteo_efectivo - ventas['efectivo'], 2)
         dif_qr  = round(conteo_qr       - ventas['qr'],       2)
-        dif_tar = round(conteo_tarjeta  - ventas['tarjeta'],  2)
-        dif_tot = round(dif_ef + dif_qr + dif_tar,            2)
+        dif_tot = round(dif_ef + dif_qr,                      2)
 
         now = datetime.now().isoformat()
         db.execute_query(
             """UPDATE arqueos_caja SET
                 estado='cerrado', fecha_cierre=?,
-                sistema_efectivo=?, sistema_qr=?, sistema_tarjeta=?, sistema_total=?,
+                sistema_efectivo=?, sistema_qr=?, sistema_tarjeta=0, sistema_total=?,
                 total_transacciones=?,
-                conteo_efectivo=?, conteo_qr=?, conteo_tarjeta=?,
-                diferencia_efectivo=?, diferencia_qr=?, diferencia_tarjeta=?, diferencia_total=?,
+                conteo_efectivo=?, conteo_qr=?, conteo_tarjeta=0,
+                diferencia_efectivo=?, diferencia_qr=?, diferencia_tarjeta=0, diferencia_total=?,
                 denominaciones=?
                WHERE id=?""",
             (now,
-             ventas['efectivo'], ventas['qr'], ventas['tarjeta'], ventas['total'],
+             ventas['efectivo'], ventas['qr'], ventas['total'],
              ventas['transacciones'],
-             conteo_efectivo, conteo_qr, conteo_tarjeta,
-             dif_ef, dif_qr, dif_tar, dif_tot,
+             conteo_efectivo, conteo_qr,
+             dif_ef, dif_qr, dif_tot,
              json.dumps(denominaciones),
              arqueo_id)
         )

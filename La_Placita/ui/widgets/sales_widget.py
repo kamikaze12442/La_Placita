@@ -284,6 +284,7 @@ class SalesWidget(QWidget):
         self.metodo_filter.addItem("Todos los métodos", None)
         self.metodo_filter.addItem("💵 Efectivo", "efectivo")
         self.metodo_filter.addItem("💱 QR", "qr")
+        #self.metodo_filter.addItem("💳 Tarjeta", "tarjeta")
         self.metodo_filter.addItem("⚡ Mixto", "mixto")
         metodo_container.addWidget(metodo_label)
         metodo_container.addWidget(self.metodo_filter)
