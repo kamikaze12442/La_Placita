@@ -705,7 +705,7 @@ class HistorialArqueosTab(QWidget):
 
         self.fecha_hasta = QDateEdit()
         self.fecha_hasta.setCalendarPopup(True)
-        self.fecha_hasta.setDate(QDate.currentDate())
+        self.fecha_hasta.setDate(QDate.currentDate().addDays(1))
         self.fecha_hasta.setDisplayFormat("dd/MM/yyyy")
         ff.addWidget(QLabel("Hasta:"))
         ff.addWidget(self.fecha_hasta)
@@ -832,7 +832,7 @@ class HistorialArqueosTab(QWidget):
         self.cajero_combo.setCurrentIndex(0)
         self.estado_combo.setCurrentIndex(0)
         self.fecha_desde.setDate(QDate.currentDate().addMonths(-1))
-        self.fecha_hasta.setDate(QDate.currentDate())
+        self.fecha_hasta.setDate(QDate.currentDate().addDays(1))
         self._detail_panel.setVisible(False)
         self.load_data()
 
