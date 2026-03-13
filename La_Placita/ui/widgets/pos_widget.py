@@ -224,23 +224,27 @@ class POSWidget(QWidget):
 
         # ── Tabla carrito ─────────────────────────────────────────────
         self.cart_table = QTableWidget(0, 5)
+        self.cart_table.setWordWrap(True)
         self.cart_table.setHorizontalHeaderLabels(["Producto", "Cant.", "Precio", "Total", ""])
 
         hh = self.cart_table.horizontalHeader()
-        hh.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
         hh.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
-        hh.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
-        hh.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
-        hh.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
+        hh.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        hh.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        hh.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        self.cart_table.setColumnWidth(0, 180)
         self.cart_table.setColumnWidth(1, 60)
-        self.cart_table.setColumnWidth(2, 68)
+        """self.cart_table.setColumnWidth(2, 68)
         self.cart_table.setColumnWidth(3, 68)
-        self.cart_table.setColumnWidth(4, 28)
+        self.cart_table.setColumnWidth(4, 28) """
         self.cart_table.setHorizontalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
 
         self.cart_table.verticalHeader().setVisible(False)
-        self.cart_table.verticalHeader().setDefaultSectionSize(38)
+        self.cart_table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+
+        #self.cart_table.verticalHeader().setDefaultSectionSize(38)
         self.cart_table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         self.cart_table.setShowGrid(False)
         self.cart_table.setAlternatingRowColors(True)
