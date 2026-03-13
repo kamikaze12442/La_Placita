@@ -400,6 +400,8 @@ class SalesWidget(QWidget):
         """Create sales table"""
         self.table = QTableWidget()
         self.table.setColumnCount(8)
+
+
         self.table.setHorizontalHeaderLabels([
             "ID Factura", "Cajero", "Cliente", "Pedido", 
             "Total", "Método", "Fecha", "Acciones"
@@ -408,7 +410,7 @@ class SalesWidget(QWidget):
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setAlternatingRowColors(True)
         self.table.verticalHeader().setVisible(False)
-        self.table.setMinimumHeight(400)
+        self.table.setMinimumHeight(1200)
         
         # Column widths
         header = self.table.horizontalHeader()
@@ -420,7 +422,8 @@ class SalesWidget(QWidget):
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)
-        self.table.verticalHeader().setDefaultSectionSize(150)
+        self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        #self.table.verticalHeader().setDefaultSectionSize(150)
         self.table.setColumnWidth(7, 180)
         self.main_layout.addWidget(self.table)
     
@@ -554,7 +557,7 @@ class SalesWidget(QWidget):
             
             # Pedido (detallado)
             if sale_obj:
-                pedido = ", ".join([f"{item.producto_nombre} ({item.cantidad})" for item in sale_obj.items])
+                pedido = "\n".join([f"{item.producto_nombre} ({item.cantidad})" for item in sale_obj.items])
             else:
                 pedido = "N/A"
             pedido_item = QTableWidgetItem(pedido)
@@ -585,17 +588,17 @@ class SalesWidget(QWidget):
             # Acciones
             actions_widget = QWidget()
             actions_layout = QHBoxLayout(actions_widget)
-            actions_layout.setContentsMargins(4, 4, 4, 4)
-            actions_layout.setSpacing(4)
+            actions_layout.setContentsMargins(1, 1, 1, 1)
+            actions_layout.setSpacing(1)
             
-            view_btn = QPushButton("👁️")
+            view_btn = QPushButton("👁")
             view_btn.setStyleSheet("""
                 QPushButton {
                     background-color: #3B82F6;
                     color: white;
                     border-radius: 6px;
-                    padding: 6px 12px;
-                    font-size: 16px;
+                    padding: 4px 4px;
+                    
                 }
                 QPushButton:hover { background-color: #2563EB; }
             """)
@@ -608,8 +611,9 @@ class SalesWidget(QWidget):
                     background-color: #10B981;
                     color: white;
                     border-radius: 6px;
-                    padding: 6px 12px;
-                    font-size: 16px;
+                    padding: 4px 4px;
+                    
+                    
                 }
                 QPushButton:hover { background-color: #059669; }
             """)
