@@ -15,6 +15,7 @@ from models.product import Product, Category
 from models.sale import Sale, SaleDetail
 from models.user import get_current_user
 from models.arqueo import ArqueoCaja
+
 try:
     from utils.printer import imprimir_recibo
     PRINTER_OK = True
@@ -232,12 +233,12 @@ class POSWidget(QWidget):
         hh.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
         hh.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         hh.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        hh.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        hh.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
         self.cart_table.setColumnWidth(0, 180)
         self.cart_table.setColumnWidth(1, 60)
-        """self.cart_table.setColumnWidth(2, 68)
-        self.cart_table.setColumnWidth(3, 68)
-        self.cart_table.setColumnWidth(4, 28) """
+        """ self.cart_table.setColumnWidth(2, 68)
+        self.cart_table.setColumnWidth(3, 68) """
+        self.cart_table.setColumnWidth(4, 30)
         self.cart_table.setHorizontalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
 
@@ -518,7 +519,7 @@ class POSWidget(QWidget):
             qty_spin = QSpinBox()
             qty_spin.setRange(0, 999)
             qty_spin.setValue(item.cantidad)
-            qty_spin.setFixedSize(52, 32)
+            qty_spin.setFixedSize(52, 26)
             qty_spin.setStyleSheet("""
                 QSpinBox {
                     border: 1px solid #E2E8F0; border-radius: 5px;
@@ -546,14 +547,14 @@ class POSWidget(QWidget):
             rm_container = QWidget()
             rm_container.setStyleSheet("background: transparent;")
             rm_lay = QHBoxLayout(rm_container)
-            rm_lay.setContentsMargins(2, 2, 2, 2)
+            rm_lay.setContentsMargins(2, 1, 2, 1)
             rm_lay.setAlignment(Qt.AlignmentFlag.AlignCenter)
             rm_btn = QPushButton("✕")
-            rm_btn.setFixedSize(18, 18)
+            rm_btn.setFixedSize(32, 26)
             rm_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             rm_btn.setStyleSheet("""
                 QPushButton { background:#FEE2E2; color:#EF4444; border:none;
-                              border-radius:5px; font-weight:700; font-size:11px; }
+                              border-radius:5px; font-weight:700; font-size:11px; padding: 4px 0px;}
                 QPushButton:hover { background:#EF4444; color:white; }
             """)
             rm_btn.clicked.connect(lambda checked=False, idx=i: self.remove_from_cart(idx))
@@ -634,6 +635,18 @@ class POSWidget(QWidget):
         else:
             self._hint.setText("")
 
+     # ── Impresión ─────────────────────────────────────────────────────
+
+    def _print_receipt(self, sale):
+        if not PRINTER_OK:
+            QMessageBox.warning(self, "Impresora no disponible",
+                "El módulo de impresión no está instalado.\n"
+                "Ejecuta: pip install pywin32")
+            return
+        ok, msg = imprimir_recibo(sale)
+        if not ok:
+            QMessageBox.warning(self, "Error de impresión", msg)
+
     # ── Completar venta ───────────────────────────────────────────────
 
     def complete_sale(self):
@@ -661,7 +674,7 @@ class POSWidget(QWidget):
 
         tipo_pedido = self._current_tipo()
 
-        sale_id = Sale.create(
+        resultado = Sale.create(
             usuario_id=self.current_user.id,
             items=self.cart_items,
             cliente=cliente,
@@ -670,6 +683,11 @@ class POSWidget(QWidget):
             monto_qr=monto_qr,
             tipo_pedido=tipo_pedido,
         )
+        # Compatibilidad: sale.py nuevo devuelve (sale_id, alertas), viejo devuelve int
+        if isinstance(resultado, tuple):
+            sale_id, alertas_stock = resultado
+        else:
+            sale_id, alertas_stock = resultado, []
 
         if not sale_id:
             QMessageBox.critical(self, "Error",
@@ -712,6 +730,10 @@ class POSWidget(QWidget):
         if reply == QMessageBox.StandardButton.Yes:
             self._print_receipt(sale)
 
+        # ── Alertas de stock bajo / agotado ───────────────────────────
+        if alertas_stock:
+            self._mostrar_alertas_stock(alertas_stock)
+
         self.cart_items.clear()
         self.client_input.clear()
         self._eff_spin.setValue(0)
@@ -723,14 +745,59 @@ class POSWidget(QWidget):
         self.update_cart_display()
         self.load_products()
 
-    # ── Impresión ─────────────────────────────────────────────────────
+    # ── Alertas de stock ──────────────────────────────────────────────
 
-    def _print_receipt(self, sale):
-        if not PRINTER_OK:
-            QMessageBox.warning(self, "Impresora no disponible",
-                "El módulo de impresión no está instalado.\n"
-                "Ejecuta: pip install pywin32")
-            return
-        ok, msg = imprimir_recibo(sale)
-        if not ok:
-            QMessageBox.warning(self, "Error de impresión", msg)
+    def _mostrar_alertas_stock(self, alertas: list):
+        """Muestra un diálogo de advertencia con los insumos agotados/bajos."""
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QFrame
+        from PySide6.QtCore import Qt
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("⚠️ Stock de insumos")
+        dlg.setMinimumWidth(380)
+        dlg.setStyleSheet("QDialog { background:#FFFBEB; } QLabel { background:transparent; }")
+
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(24, 20, 24, 20)
+        lay.setSpacing(10)
+
+        # Título
+        title = QLabel("⚠️  Insumos agotados o en stock bajo")
+        title.setStyleSheet("font-size:14px; font-weight:700; color:#92400E;")
+        lay.addWidget(title)
+
+        # Línea divisora
+        sep = QFrame(); sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setStyleSheet("background:#FCD34D; max-height:1px; margin:2px 0;")
+        lay.addWidget(sep)
+
+        nota = QLabel("Los siguientes insumos necesitan reposición:")
+        nota.setStyleSheet("font-size:11px; color:#78350F;")
+        lay.addWidget(nota)
+
+        # Lista de insumos
+        for txt in alertas:
+            lbl = QLabel(f"  🔴  {txt}")
+            lbl.setStyleSheet(
+                "font-size:12px; font-weight:600; color:#B91C1C; "
+                "background:#FEF2F2; border-radius:6px; padding:4px 10px;"
+            )
+            lay.addWidget(lbl)
+
+        pie = QLabel("Ir a Inventario → Insumos para registrar una entrada.")
+        pie.setStyleSheet("font-size:10px; color:#92400E; margin-top:4px;")
+        pie.setWordWrap(True)
+        lay.addWidget(pie)
+
+        btn = QPushButton("Entendido")
+        btn.setStyleSheet(
+            "QPushButton { background:#F59E0B; color:white; border:none; "
+            "border-radius:8px; font-size:12px; font-weight:700; padding:8px 24px; }"
+            "QPushButton:hover { background:#D97706; }"
+        )
+        btn.clicked.connect(dlg.accept)
+        lay.addWidget(btn, alignment=Qt.AlignmentFlag.AlignRight)
+
+        dlg.exec()
+
+   
