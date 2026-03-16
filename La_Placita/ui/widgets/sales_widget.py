@@ -4,10 +4,10 @@ Complete sales management with statistics, filters, charts and reports
 """
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
+    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QFrame,
     QTableWidget, QTableWidgetItem, QPushButton, QLineEdit,
     QComboBox, QDateEdit, QScrollArea, QHeaderView, QDialog,
-    QDialogButtonBox, QTextEdit, QMessageBox
+    QDialogButtonBox, QTextEdit, QMessageBox, QSizePolicy
 )
 from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QFont, QPainter, QColor
@@ -21,64 +21,71 @@ from utils.excel_exporter import ExcelExporter
 
 
 class StatCard(QFrame):
-    """Stat card with comparison indicator"""
-    
-    def __init__(self, icon, value, label, change=None, change_positive=True):
+    """Stat card con fondo de color."""
+
+    THEMES = {
+        "green":  {"bg": "#F9FAFB", "accent": "#374151", "icon_bg": "#E5E7EB"},
+        "blue":   {"bg": "#F9FAFB", "accent": "#374151", "icon_bg": "#E5E7EB"},
+        "orange": {"bg": "#F9FAFB", "accent": "#374151", "icon_bg": "#E5E7EB"},
+        "purple": {"bg": "#F9FAFB", "accent": "#374151", "icon_bg": "#E5E7EB"},
+    }
+
+    def __init__(self, icon, value, label, change=None,
+                 change_positive=True, theme="orange"):
         super().__init__()
+        t = self.THEMES.get(theme, self.THEMES["orange"])
         self.setObjectName("stat-card")
         self.setStyleSheet(f"""
             QFrame#stat-card {{
-                background-color: white;
-                border: 1px solid #E5E7EB;
+                background-color: {t['bg']};
+                border: 1.5px solid {t['icon_bg']};
                 border-radius: 16px;
-                padding: 24px;
-                min-height: 120px;
+                padding: 20px;
+                min-height: 110px;
             }}
         """)
-        
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(12)
-        
-        # Icon
+        layout.setSpacing(10)
+
+        # Ícono
         icon_label = QLabel(icon)
+        icon_label.setFixedSize(48, 48)
         icon_label.setStyleSheet(f"""
-            background-color: #FF6B35;
-            color: #FF6B35;
-            font-size: 32px;
-            padding: 12px;
+            background-color: {t['icon_bg']};
+            color: {t['accent']};
+            font-size: 24px;
             border-radius: 12px;
-            min-width: 26px;
-            max-width: 26px;
-            min-height: 26px;
-            max-height: 26px;
         """)
         icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(icon_label)
-        
-        # Value with change indicator
-        value_layout = QHBoxLayout()
-        value_layout.setSpacing(8)
-        
+
+        # Valor + cambio
+        val_row = QHBoxLayout()
+        val_row.setSpacing(8)
         value_label = QLabel(value)
-        value_label.setStyleSheet("font-size: 28px; font-weight: 700; color: #1F2937;")
-        value_layout.addWidget(value_label)
-        
+        value_label.setStyleSheet(
+            f"font-size: 26px; font-weight: 800; color: {t['accent']};")
+        val_row.addWidget(value_label)
+
         if change is not None:
-            change_color = "#10B981" if change_positive else "#EF4444"
-            change_arrow = "↑" if change_positive else "↓"
-            change_label = QLabel(f"{change_arrow} {abs(change):.1f}%")
-            change_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {change_color};")
-            value_layout.addWidget(change_label)
-        
-        value_layout.addStretch()
-        layout.addLayout(value_layout)
-        
-        # Label
-        label_label = QLabel(label)
-        label_label.setStyleSheet("font-size: 14px; color: #6B7280; font-weight: 500;")
-        layout.addWidget(label_label)
-        
+            arrow = "↑" if change_positive else "↓"
+            c_col = "#059669" if change_positive else "#DC2626"
+            chg = QLabel(f"{arrow} {abs(change):.1f}%")
+            chg.setStyleSheet(
+                f"font-size: 12px; font-weight: 600; color: {c_col};")
+            val_row.addWidget(chg)
+
+        val_row.addStretch()
+        layout.addLayout(val_row)
+
+        # Etiqueta
+        lbl = QLabel(label)
+        lbl.setStyleSheet(
+            f"font-size: 12px; color: {t['accent']}; font-weight: 600; "
+            "opacity: 0.8;")
+        layout.addWidget(lbl)
         layout.addStretch()
 
 
@@ -170,46 +177,38 @@ class SalesWidget(QWidget):
     
     def init_ui(self):
         """Initialize UI"""
-        # Main scroll
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
-        
-        # Content
+
         content = QWidget()
         self.main_layout = QVBoxLayout(content)
         self.main_layout.setContentsMargins(40, 30, 40, 40)
-        self.main_layout.setSpacing(30)
-        
-        # Header
+        self.main_layout.setSpacing(24)
+
+        # 1. Header
         self._create_header()
-        
-        # Stats cards
-        self.stats_container = QWidget()
-        self.stats_layout = QHBoxLayout(self.stats_container)
-        self.stats_layout.setSpacing(20)
-        self.stats_layout.setContentsMargins(0, 0, 0, 0)
-        self.main_layout.addWidget(self.stats_container)
-        
-        # Filters
-        self._create_filters()
-        
-        # Action buttons
+
+        # 2. Stats 4 cards en fila completa
+        self.stats_grid = QGridLayout()
+        self.stats_grid.setSpacing(16)
+        stats_wrapper = QWidget()
+        stats_wrapper.setLayout(self.stats_grid)
+        self.main_layout.addWidget(stats_wrapper)
+
+        # 3. Gráfico torta (60%) + Top 5 productos (40%)
+        self._create_summary_section()
+
+        # 4. Filtro horizontal
+        self._create_filters_panel(self.main_layout)
+
+        # 5. Botones de acción
         self._create_action_buttons()
-        
-        # Summary section (initially hidden)
-        self.summary_widget = QWidget()
-        self.summary_layout = QVBoxLayout(self.summary_widget)
-        self.summary_layout.setContentsMargins(0, 0, 0, 0)
-        self.summary_layout.setSpacing(20)
-        self.summary_widget.hide()
-        self.main_layout.addWidget(self.summary_widget)
-        
-        # Table
+
+        # 6. Tabla
         self._create_table()
-        
+
         scroll.setWidget(content)
-        
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(scroll)
@@ -228,172 +227,244 @@ class SalesWidget(QWidget):
         
         self.main_layout.addLayout(header_layout)
     
-    def _create_filters(self):
-        """Create filter section"""
+    def _create_summary_section(self):
+        """Gráfico torta (izq 60%) + Top 5 productos (der 40%) — siempre visible."""
+        row = QHBoxLayout()
+        row.setSpacing(20)
+
+        # ── Gráfico de torta ──────────────────────────────────────────
+        chart_frame = QFrame()
+        chart_frame.setStyleSheet("""
+            QFrame {
+                background-color: white;
+                border: 1px solid #E5E7EB;
+                border-radius: 16px;
+                padding: 20px;
+            }
+        """)
+        chart_layout = QVBoxLayout(chart_frame)
+        chart_layout.setSpacing(12)
+
+        chart_title = QLabel("📊 Ventas por Producto")
+        chart_title.setStyleSheet(
+            "font-size: 16px; font-weight: 700; color: #1F2937;")
+        chart_layout.addWidget(chart_title)
+
+        self.chart_placeholder = QLabel("Sin datos — filtrá para ver el gráfico")
+        self.chart_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.chart_placeholder.setStyleSheet(
+            "color: #9CA3AF; font-size: 13px; padding: 60px 0;")
+        chart_layout.addWidget(self.chart_placeholder)
+
+        # El QChartView se inserta dinámicamente en _update_chart
+        self.chart_container = chart_layout
+        row.addWidget(chart_frame, stretch=3)
+
+        # ── Top 5 productos más vendidos ──────────────────────────────
+        top5_frame = QFrame()
+        top5_frame.setStyleSheet("""
+            QFrame {
+                background-color: white;
+                border: 1px solid #E5E7EB;
+                border-radius: 16px;
+                padding: 20px;
+            }
+        """)
+        self.top5_layout = QVBoxLayout(top5_frame)
+        self.top5_layout.setSpacing(10)
+
+        top5_title = QLabel("🏆 Top 5 Productos más Vendidos")
+        top5_title.setStyleSheet(
+            "font-size: 16px; font-weight: 700; color: #1F2937;")
+        self.top5_layout.addWidget(top5_title)
+
+        self.top5_placeholder = QLabel("Sin datos — filtrá para ver el ranking")
+        self.top5_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.top5_placeholder.setStyleSheet(
+            "color: #9CA3AF; font-size: 13px; padding: 40px 0;")
+        self.top5_layout.addWidget(self.top5_placeholder)
+        self.top5_layout.addStretch()
+
+        row.addWidget(top5_frame, stretch=2)
+        self.main_layout.addLayout(row)
+
+    def _create_filters_panel(self, parent_layout):
+        """Barra de filtros horizontal — ancho completo."""
+
+        class _SmartCombo(QComboBox):
+            def wheelEvent(self, e):
+                super().wheelEvent(e) if self.view().isVisible() else e.ignore()
+
+        class _SmartDate(QDateEdit):
+            def wheelEvent(self, e):
+                super().wheelEvent(e) if self.hasFocus() else e.ignore()
+
         filter_frame = QFrame()
         filter_frame.setStyleSheet("""
             QFrame {
                 background-color: white;
                 border: 1px solid #E5E7EB;
-                border-radius: 16px;
-                padding: 24px;
+                border-radius: 14px;
+                padding: 16px 20px;
+            }
+            QLabel {
+                border: none;
+                background: transparent;
             }
         """)
-        filter_layout = QVBoxLayout(filter_frame)
-        filter_layout.setSpacing(16)
-        
-        # Title
-        filter_title = QLabel("🔍 Filtros de Búsqueda")
-        filter_title.setStyleSheet("font-size: 18px; font-weight: 700; color: #1F2937;")
-        filter_layout.addWidget(filter_title)
-        
-        # Filters row 1
-        row1 = QHBoxLayout()
-        row1.setSpacing(16)
-        
+
+        outer = QVBoxLayout(filter_frame)
+        outer.setSpacing(10)
+        outer.setContentsMargins(0, 0, 0, 0)
+
+        # Título
+        title = QLabel("🔍 Filtros de Búsqueda")
+        title.setStyleSheet(
+            "font-size: 15px; font-weight: 700; color: #1F2937;")
+        outer.addWidget(title)
+
+        input_style = """
+            QLineEdit, QComboBox, QDateEdit {
+                border: none;
+                border-bottom: 1px solid #D1D5DB;
+                border-radius: 0px;
+                padding: 4px 8px;
+                font-size: 13px;
+                background: white;
+                min-height: 32px;
+                max-height: 32px;
+            }
+            QLineEdit:focus, QComboBox:focus, QDateEdit:focus {
+                border-bottom: 2px solid #FF6B35;
+            }
+            QComboBox::drop-down { border: none; }
+        """
+
+        def lbl(text):
+            l = QLabel(text)
+            l.setStyleSheet(
+                "font-weight: 600; color: #9CA3AF; font-size: 11px; "
+                "letter-spacing: 0.5px;")
+            l.setFixedHeight(16)
+            return l
+
+        # Fila única horizontal con todos los campos
+        row = QHBoxLayout()
+        row.setSpacing(16)
+
+        def add_field(label_text, widget, stretch=1):
+            col = QVBoxLayout()
+            col.setSpacing(3)
+            col.setContentsMargins(0, 0, 0, 0)
+            col.addWidget(lbl(label_text))
+            col.addWidget(widget)
+            row.addLayout(col, stretch)
+
         # ID Factura
-        id_container = QVBoxLayout()
-        id_label = QLabel("ID Factura")
-        id_label.setStyleSheet("font-weight: 600; color: #4B5563; font-size: 13px;")
         self.id_filter = QLineEdit()
         self.id_filter.setPlaceholderText("FACT-20251208-0001")
-        id_container.addWidget(id_label)
-        id_container.addWidget(self.id_filter)
-        row1.addLayout(id_container)
-        
+        self.id_filter.setStyleSheet(input_style)
+        add_field("ID FACTURA", self.id_filter, stretch=2)
+
         # Cajero
-        cajero_container = QVBoxLayout()
-        cajero_label = QLabel("Cajero")
-        cajero_label.setStyleSheet("font-weight: 600; color: #4B5563; font-size: 13px;")
-        self.cajero_filter = QComboBox()
+        self.cajero_filter = _SmartCombo()
+        self.cajero_filter.setStyleSheet(input_style)
         self.cajero_filter.addItem("Todos los cajeros", None)
-        cajero_container.addWidget(cajero_label)
-        cajero_container.addWidget(self.cajero_filter)
-        row1.addLayout(cajero_container)
-        
-        # Load cajeros
-        users = User.get_all()
-        for user in users:
+        for user in User.get_all():
             self.cajero_filter.addItem(user.nombre, user.id)
-        
-        # Método de pago
-        metodo_container = QVBoxLayout()
-        metodo_label = QLabel("Método de Pago")
-        metodo_label.setStyleSheet("font-weight: 600; color: #4B5563; font-size: 13px;")
-        self.metodo_filter = QComboBox()
+        add_field("CAJERO", self.cajero_filter, stretch=1)
+
+        # Método
+        self.metodo_filter = _SmartCombo()
+        self.metodo_filter.setStyleSheet(input_style)
         self.metodo_filter.addItem("Todos los métodos", None)
         self.metodo_filter.addItem("💵 Efectivo", "efectivo")
         self.metodo_filter.addItem("💱 QR", "qr")
-        #self.metodo_filter.addItem("💳 Tarjeta", "tarjeta")
         self.metodo_filter.addItem("⚡ Mixto", "mixto")
-        metodo_container.addWidget(metodo_label)
-        metodo_container.addWidget(self.metodo_filter)
-        row1.addLayout(metodo_container)
-        
-        filter_layout.addLayout(row1)
-        
-        # Filters row 2
-        row2 = QHBoxLayout()
-        row2.setSpacing(16)
-        
-        # Fecha inicial
-        fecha_ini_container = QVBoxLayout()
-        fecha_ini_label = QLabel("Fecha Inicial")
-        fecha_ini_label.setStyleSheet("font-weight: 600; color: #4B5563; font-size: 13px;")
-        self.fecha_inicial = QDateEdit()
+        add_field("MÉTODO DE PAGO", self.metodo_filter, stretch=1)
+
+        # Fecha Inicial
+        self.fecha_inicial = _SmartDate()
         self.fecha_inicial.setCalendarPopup(True)
         self.fecha_inicial.setDate(QDate.currentDate().addMonths(-1))
         self.fecha_inicial.setDisplayFormat("dd/MM/yyyy")
-        fecha_ini_container.addWidget(fecha_ini_label)
-        fecha_ini_container.addWidget(self.fecha_inicial)
-        row2.addLayout(fecha_ini_container)
-        
-        # Fecha final
-        fecha_fin_container = QVBoxLayout()
-        fecha_fin_label = QLabel("Fecha Final")
-        fecha_fin_label.setStyleSheet("font-weight: 600; color: #4B5563; font-size: 13px;")
-        self.fecha_final = QDateEdit()
+        self.fecha_inicial.setStyleSheet(input_style)
+        add_field("FECHA INICIAL", self.fecha_inicial, stretch=1)
+
+        # Fecha Final
+        self.fecha_final = _SmartDate()
         self.fecha_final.setCalendarPopup(True)
         self.fecha_final.setDate(QDate.currentDate())
         self.fecha_final.setDisplayFormat("dd/MM/yyyy")
-        fecha_fin_container.addWidget(fecha_fin_label)
-        fecha_fin_container.addWidget(self.fecha_final)
-        row2.addLayout(fecha_fin_container)
-        
-        # Filter button
-        filter_btn = QPushButton("🔍 Filtrar Resultados")
+        self.fecha_final.setStyleSheet(input_style)
+        add_field("FECHA FINAL", self.fecha_final, stretch=1)
+
+        # Botón alineado al fondo
+        btn_col = QVBoxLayout()
+        btn_col.setSpacing(3)
+        btn_col.setContentsMargins(0, 0, 0, 0)
+        btn_col.addWidget(lbl(""))
+        filter_btn = QPushButton("Filtrar")
+        filter_btn.setFixedHeight(32)
+        filter_btn.setFixedWidth(90)
         filter_btn.setStyleSheet("""
             QPushButton {
                 background-color: #FF6B35;
                 color: white;
-                padding: 12px 24px;
-                border-radius: 10px;
-                font-weight: 600;
-                min-height: 44px;
-                margin-top: 25px;
+                border-radius: 8px;
+                font-weight: 700;
+                font-size: 13px;
             }
             QPushButton:hover { background-color: #E85D2F; }
         """)
         filter_btn.clicked.connect(self.load_sales)
-        row2.addWidget(filter_btn)
-        
-        filter_layout.addLayout(row2)
-        self.main_layout.addWidget(filter_frame)
+        btn_col.addWidget(filter_btn)
+        row.addLayout(btn_col)
+
+        outer.addLayout(row)
+
+        # Agregar al layout padre
+        if isinstance(parent_layout, QHBoxLayout):
+            parent_layout.addWidget(filter_frame, stretch=0)
+        else:
+            parent_layout.addWidget(filter_frame)
     
     def _create_action_buttons(self):
-        """Create action buttons"""
+        """Botones de acción — sin botón Resumen."""
         buttons_layout = QHBoxLayout()
         buttons_layout.setSpacing(12)
-        
-        # Resumen/Mostrar button
-        self.summary_btn = QPushButton("📊 Resumen")
-        self.summary_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #3B82F6;
-                color: white;
-                padding: 12px 24px;
-                border-radius: 10px;
-                font-weight: 600;
-                min-height: 44px;
-            }
-            QPushButton:hover { background-color: #2563EB; }
-        """)
-        self.summary_btn.clicked.connect(self.toggle_summary)
-        buttons_layout.addWidget(self.summary_btn)
-        
-        # Imprimir button
+        buttons_layout.addStretch()
+
         print_btn = QPushButton("🖨️ Imprimir")
         print_btn.setStyleSheet("""
             QPushButton {
                 background-color: #10B981;
                 color: white;
-                padding: 12px 24px;
+                padding: 10px 24px;
                 border-radius: 10px;
                 font-weight: 600;
-                min-height: 44px;
+                min-height: 40px;
             }
             QPushButton:hover { background-color: #059669; }
         """)
         print_btn.clicked.connect(self.print_report)
         buttons_layout.addWidget(print_btn)
-        
-        # PDF button
+
         pdf_btn = QPushButton("📄 Generar PDF")
         pdf_btn.setStyleSheet("""
             QPushButton {
                 background-color: #EF4444;
                 color: white;
-                padding: 12px 24px;
+                padding: 10px 24px;
                 border-radius: 10px;
                 font-weight: 600;
-                min-height: 44px;
+                min-height: 40px;
             }
             QPushButton:hover { background-color: #DC2626; }
         """)
         pdf_btn.clicked.connect(self.generate_pdf)
         buttons_layout.addWidget(pdf_btn)
-        
-        buttons_layout.addStretch()
+
         self.main_layout.addLayout(buttons_layout)
     
     def _create_table(self):
@@ -469,70 +540,49 @@ class SalesWidget(QWidget):
         self._update_table()
     
     def _update_stats(self):
-        """Update stat cards"""
-        # Clear existing stats
-        while self.stats_layout.count():
-            child = self.stats_layout.takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()
-        
-        if not self.current_sales:
-            return
-        
-        # Calculate today's stats
-        today = datetime.now().date()
+        """Actualiza las 4 stat cards en fila horizontal con colores."""
+        while self.stats_grid.count():
+            item = self.stats_grid.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        today     = datetime.now().date()
         yesterday = today - timedelta(days=1)
-        
-        today_sales = [s for s in self.current_sales if datetime.fromisoformat(s['fecha_venta']).date() == today]
-        yesterday_sales = [s for s in self.current_sales if datetime.fromisoformat(s['fecha_venta']).date() == yesterday]
-        
-        # Ingreso total del día
-        today_total = sum(s['total'] for s in today_sales)
-        yesterday_total = sum(s['total'] for s in yesterday_sales)
-        change_percent = ((today_total - yesterday_total) / yesterday_total * 100) if yesterday_total > 0 else 0
-        
-        card1 = StatCard(
-            "💰",
-            f"Bs {today_total:.2f}",
-            "Ingreso Total del Día",
-            change_percent,
-            change_percent >= 0
-        )
-        self.stats_layout.addWidget(card1)
-        
-        # Facturas emitidas
-        card2 = StatCard(
-            "🎫",
-            str(len(today_sales)),
-            "Facturas Emitidas Hoy",
-            None
-        )
-        self.stats_layout.addWidget(card2)
-        
-        # % QR
-        total_count = len(self.current_sales)
-        qr_count = sum(1 for s in self.current_sales if s['metodo_pago'] == 'qr')
-        qr_percent = (qr_count / total_count * 100) if total_count > 0 else 0
-        
-        card3 = StatCard(
-            "💱",
-            f"{qr_percent:.1f}%",
-            "Pagos con QR",
-            None
-        )
-        self.stats_layout.addWidget(card3)
-        
-        # % Efectivo
+
+        today_sales     = [s for s in self.current_sales
+                           if datetime.fromisoformat(s['fecha_venta']).date() == today]
+        yesterday_sales = [s for s in self.current_sales
+                           if datetime.fromisoformat(s['fecha_venta']).date() == yesterday]
+
+        today_total     = sum(s['total'] for s in today_sales) if today_sales else 0
+        yesterday_total = sum(s['total'] for s in yesterday_sales) if yesterday_sales else 0
+        change_percent  = ((today_total - yesterday_total) / yesterday_total * 100) \
+                          if yesterday_total > 0 else 0
+
+        qr_count       = sum(1 for s in self.current_sales if s['metodo_pago'] == 'qr')
         efectivo_count = sum(1 for s in self.current_sales if s['metodo_pago'] == 'efectivo')
-        efectivo_percent = (efectivo_count / total_count * 100) if total_count > 0 else 0
-        
-        card4 = StatCard(
-            "💵",
-            f"{efectivo_percent:.1f}%",
-            "Pagos en Efectivo",
-            None
-        )
-        self.stats_layout.addWidget(card4)
+
+        # 4 cards en fila: col 0,1,2,3 — fila 0
+        cards = [
+            (StatCard("💰", f"Bs {today_total:.2f}",
+                      "Ingreso Total del Día", change_percent,
+                      change_percent >= 0, theme="green"),  0),
+            (StatCard("🎫", str(len(today_sales)),
+                      "Facturas Emitidas Hoy", None,
+                      theme="blue"),                         1),
+            (StatCard("💱", str(qr_count),
+                      "Ventas con QR", None,
+                      theme="purple"),                       2),
+            (StatCard("💵", str(efectivo_count),
+                      "Ventas en Efectivo", None,
+                      theme="orange"),                       3),
+        ]
+
+        for card, col in cards:
+            self.stats_grid.addWidget(card, 0, col)
+
+        self._update_chart()
+        self._update_top5()
     
     def _update_table(self):
         """Update table with current sales"""
@@ -623,62 +673,149 @@ class SalesWidget(QWidget):
             self.table.setCellWidget(row, 7, actions_widget)
             self.table.setRowHeight(row, 60)
     
+    def _update_chart(self):
+        """Actualiza el gráfico de torta con los datos filtrados."""
+        # Limpiar contenedor (conservar solo el título en índice 0)
+        while self.chart_container.count() > 1:
+            item = self.chart_container.takeAt(1)
+            if item.widget():
+                item.widget().deleteLater()
+
+        product_sales = self._get_product_sales()
+
+        if not product_sales:
+            lbl = QLabel("Sin datos para mostrar")
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lbl.setStyleSheet("color: #9CA3AF; font-size: 13px; padding: 60px 0;")
+            self.chart_container.addWidget(lbl)
+            return
+
+        colors = ['#FF6B35', '#3B82F6', '#10B981', '#F59E0B', '#EF4444',
+                  '#8B5CF6', '#EC4899', '#14B8A6', '#F97316', '#06B6D4']
+
+        series = QPieSeries()
+        for i, (product, quantity) in enumerate(product_sales[:10]):
+            sl = series.append(f"{product}  {quantity}", quantity)
+            sl.setColor(QColor(colors[i % len(colors)]))
+            sl.setLabelVisible(True)
+
+        chart = QChart()
+        chart.addSeries(series)
+        chart.setAnimationOptions(QChart.AnimationOption.SeriesAnimations)
+        chart.legend().setAlignment(Qt.AlignmentFlag.AlignRight)
+        chart.setBackgroundVisible(False)
+        chart.setMargins(__import__('PySide6.QtCore', fromlist=['QMargins']).QMargins(0, 0, 0, 0))
+
+        chart_view = QChartView(chart)
+        chart_view.setRenderHint(QPainter.RenderHint.Antialiasing)
+        chart_view.setMinimumHeight(320)
+        self.chart_container.addWidget(chart_view)
+
+    def _update_top5(self):
+        """Top 5 productos — números grandes, columnas limpias."""
+        while self.top5_layout.count() > 1:
+            item = self.top5_layout.takeAt(1)
+            if item.widget():
+                item.widget().deleteLater()
+
+        top5 = self._get_top_products(None, 5)
+
+        if not top5:
+            lbl = QLabel("Sin datos — filtrá para ver el ranking")
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lbl.setStyleSheet("color: #9CA3AF; font-size: 13px; padding: 30px 0;")
+            self.top5_layout.addWidget(lbl)
+            self.top5_layout.addStretch()
+            return
+
+        # Colores vibrantes por posición
+        themes = [
+            {"bg": "#FFF7ED", "border": "#FED7AA", "num_bg": "#F97316",
+             "num_fg": "white",  "txt": "#9A3412"},
+            {"bg": "#F0F9FF", "border": "#BAE6FD", "num_bg": "#0EA5E9",
+             "num_fg": "white",  "txt": "#0C4A6E"},
+            {"bg": "#F0FDF4", "border": "#BBF7D0", "num_bg": "#22C55E",
+             "num_fg": "white",  "txt": "#14532D"},
+            {"bg": "#F5F3FF", "border": "#DDD6FE", "num_bg": "#8B5CF6",
+             "num_fg": "white",  "txt": "#4C1D95"},
+            {"bg": "#FFF1F2", "border": "#FECDD3", "num_bg": "#F43F5E",
+             "num_fg": "white",  "txt": "#881337"},
+        ]
+
+        for i, prod in enumerate(top5):
+            t = themes[i]
+
+            row_w = QFrame()
+            row_w.setStyleSheet(f"""
+                QFrame {{
+                    background-color: {t['bg']};
+                    border: 1.5px solid {t['border']};
+                    border-radius: 12px;
+                }}
+            """)
+            rl = QHBoxLayout(row_w)
+            rl.setContentsMargins(14, 10, 14, 10)
+            rl.setSpacing(8)
+
+            # Número de posición — círculo de color
+            num = QLabel()
+            num.setFixedSize(22, 22)
+            num.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            num.setStyleSheet(f"""              
+                background-color: {t['num_bg']};
+                color: white;
+                font-size: 18px;
+                
+                border-radius: 16px;
+            """)
+            num.setText(str(i + 1))
+            rl.addWidget(num)
+
+            # Nombre del producto
+            name_lbl = QLabel(prod['nombre'])
+            name_lbl.setMaximumWidth(160)
+            name_lbl.setWordWrap(False)
+            name_lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+            name_lbl.setStyleSheet(
+                f"font-size: 14px; font-weight: 700; color: {t['txt']};")
+            rl.addWidget(name_lbl, stretch=1)
+            
+
+            # Cantidad — badge
+            qty_badge = QFrame()
+            qty_badge.setStyleSheet(f"""
+                QFrame {{
+                    background-color: {t['border']};
+                    border-radius: 8px;
+                    padding: 2px 8px;
+                }}
+            """)
+            qty_lay = QHBoxLayout(qty_badge)
+            qty_lay.setContentsMargins(8, 4, 8, 4)
+            qty_lay.setSpacing(0)
+            qty_lbl = QLabel(f"{prod['cantidad']} uds")
+            qty_lbl.setStyleSheet(
+                f"font-size: 12px; font-weight: 700; color: {t['txt']};")
+            qty_lay.addWidget(qty_lbl)
+            rl.addWidget(qty_badge)
+
+            # Total en verde fuerte
+            total_lbl = QLabel(f"Bs {prod['total']:.2f}")
+            total_lbl.setFixedWidth(110)
+            total_lbl.setAlignment(Qt.AlignmentFlag.AlignRight |
+                                   Qt.AlignmentFlag.AlignVCenter)
+            total_lbl.setStyleSheet(
+                "font-size: 14px; font-weight: 800; color: #059669;")
+            rl.addWidget(total_lbl)
+
+            self.top5_layout.addWidget(row_w)
+
+        self.top5_layout.addStretch()
+
     def toggle_summary(self):
-        """Toggle summary view"""
-        if not self.showing_summary:
-            self._show_summary()
-            self.summary_btn.setText("📋 Mostrar Tabla")
-            self.showing_summary = True
-        else:
-            self._hide_summary()
-            self.summary_btn.setText("📊 Resumen")
-            self.showing_summary = False
-    
-    def _show_summary(self):
-        """Show summary section"""
-        # Clear previous summary
-        while self.summary_layout.count():
-            child = self.summary_layout.takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()
-        
-        # Top section: Chart + Top products
-        top_layout = QHBoxLayout()
-        top_layout.setSpacing(20)
-        
-        # Pie chart
-        chart_widget = self._create_products_chart()
-        top_layout.addWidget(chart_widget, 2)
-        
-        # Top products column
-        tops_layout = QVBoxLayout()
-        tops_layout.setSpacing(16)
-        
-        top_all = self._get_top_products(None, 3)
-        top_comidas = self._get_top_products('Comidas', 3)
-        top_bebidas = self._get_top_products('Bebidas', 3)
-        top_extras = self._get_top_products('Extras', 3)
-        
-        tops_layout.addWidget(TopProductCard("Top 3 Productos", top_all, "🏆"))
-        tops_layout.addWidget(TopProductCard("Top 3 Comidas", top_comidas, "🍽️"))
-        tops_layout.addWidget(TopProductCard("Top 3 Bebidas", top_bebidas, "🥤"))
-        tops_layout.addWidget(TopProductCard("Top 3 Extras", top_extras, "🍟"))
-        
-        top_layout.addLayout(tops_layout, 1)
-        self.summary_layout.addLayout(top_layout)
-        
-        # Legend: Products by color with totals
-        legend_widget = self._create_products_legend()
-        self.summary_layout.addWidget(legend_widget)
-        
-        self.summary_widget.show()
-        self.table.hide()
-    
-    def _hide_summary(self):
-        """Hide summary section"""
-        self.summary_widget.hide()
-        self.table.show()
-    
+        """Toggle summary view — mantenido por compatibilidad."""
+        pass
+
     def _create_products_chart(self):
         """Create pie chart of product sales"""
         widget = QFrame()
