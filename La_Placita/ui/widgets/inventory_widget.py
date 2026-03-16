@@ -1684,9 +1684,172 @@ class InsumosTab(QWidget):
 # TAB 2 — Recetas
 # ─────────────────────────────────────────────────────────────────────────────
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Diálogo — Calcular costo de un producto (solo admin)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class CostoDialog(QDialog):
+    """
+    Calcula el precio de venta sugerido de un producto con receta.
+    Factores: costo de insumos + otros costos extra + margen de ganancia %.
+    Solo visible para administradores.
+    """
+    def __init__(self, producto, parent=None):
+        super().__init__(parent)
+        self.producto = producto
+        self.setWindowTitle(f"💰 Calcular costo — {producto.nombre}")
+        self.setMinimumWidth(480)
+        self.setStyleSheet(
+            f"QDialog {{ background:{C_BG}; }}"
+            f"QLabel {{ background:transparent; }}")
+        self._receta = Receta.get_por_producto(producto.id)
+        self._costo_insumos = sum(
+            ri.cantidad * (Insumo.get_by_id(ri.insumo_id).costo_unitario
+                           if Insumo.get_by_id(ri.insumo_id) else 0)
+            for ri in self._receta
+        )
+        self._build()
+        self._calcular()
+
+    def _build(self):
+        lay = QVBoxLayout(self)
+        lay.setSpacing(14); lay.setContentsMargins(24, 22, 24, 20)
+
+        title = QLabel("💰  Calcular precio de venta")
+        title.setStyleSheet(f"font-size:16px; font-weight:700; color:{C_TEXT};")
+        lay.addWidget(title)
+        sub = QLabel(f"Producto: <b>{self.producto.nombre}</b>")
+        sub.setTextFormat(Qt.TextFormat.RichText)
+        sub.setStyleSheet(f"font-size:12px; color:{C_MUTED};")
+        lay.addWidget(sub)
+        lay.addWidget(_sep())
+
+        # ── Costo de insumos (readonly) ───────────────────────────────────────
+        lay.addWidget(_lbl_section("COSTO DE INSUMOS  (según receta)"))
+        ins_frame = _card_frame()
+        ifl = QVBoxLayout(ins_frame)
+        ifl.setContentsMargins(14, 10, 14, 10); ifl.setSpacing(4)
+
+        UNIDADES_ENVASE = {"Paquete", "Caja", "Bolsa"}
+        if self._receta:
+            for ri in self._receta:
+                ins = Insumo.get_by_id(ri.insumo_id)
+                costo_ri = ri.cantidad * (ins.costo_unitario if ins else 0)
+                unidad_txt = ("unidades" if ins and ins.unidad in UNIDADES_ENVASE
+                              else (ins.unidad if ins else ""))
+                row_w = QWidget(); row_w.setStyleSheet("background:transparent;")
+                rl = QHBoxLayout(row_w); rl.setContentsMargins(0, 2, 0, 2)
+                nm = QLabel(f"{ri.insumo_nombre}  ×  {ri.cantidad:.3g} {unidad_txt}")
+                nm.setStyleSheet(f"font-size:11px; color:{C_TEXT};")
+                ct = QLabel(f"Bs {costo_ri:.4f}")
+                ct.setStyleSheet(f"font-size:11px; font-weight:600; color:{C_AMBER};")
+                rl.addWidget(nm); rl.addStretch(); rl.addWidget(ct)
+                ifl.addWidget(row_w)
+            sep_w = QFrame(); sep_w.setFrameShape(QFrame.Shape.HLine)
+            sep_w.setStyleSheet(f"background:{C_BORDER}; max-height:1px;")
+            ifl.addWidget(sep_w)
+        else:
+            nl = QLabel("Sin receta — no hay insumos registrados.")
+            nl.setStyleSheet(f"font-size:11px; color:{C_MUTED};")
+            ifl.addWidget(nl)
+
+        total_row = QWidget(); total_row.setStyleSheet("background:transparent;")
+        trl = QHBoxLayout(total_row); trl.setContentsMargins(0, 4, 0, 0)
+        tl = QLabel("Total insumos:")
+        tl.setStyleSheet(f"font-size:12px; font-weight:700; color:{C_TEXT};")
+        self._lbl_insumos = QLabel(f"Bs {self._costo_insumos:.4f}")
+        self._lbl_insumos.setStyleSheet(
+            f"font-size:13px; font-weight:700; color:{C_AMBER};")
+        trl.addWidget(tl); trl.addStretch(); trl.addWidget(self._lbl_insumos)
+        ifl.addWidget(total_row)
+        lay.addWidget(ins_frame)
+
+        # ── Factores adicionales ──────────────────────────────────────────────
+        lay.addWidget(_lbl_section("FACTORES ADICIONALES"))
+        form = QFormLayout(); form.setSpacing(10)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+
+        self.extras = QDoubleSpinBox()
+        self.extras.setRange(0, 999999); self.extras.setDecimals(2)
+        self.extras.setPrefix("Bs ")
+        self.extras.setToolTip("Empaque, transporte, gas, electricidad, etc.")
+        self.extras.setStyleSheet(_SP)
+        self.extras.valueChanged.connect(self._calcular)
+        form.addRow("Otros costos (Bs):", self.extras)
+
+        self.margen = QDoubleSpinBox()
+        self.margen.setRange(0, 1000); self.margen.setDecimals(1)
+        self.margen.setSuffix("  %"); self.margen.setValue(30.0)
+        self.margen.setStyleSheet(_SP)
+        self.margen.valueChanged.connect(self._calcular)
+        form.addRow("Margen de ganancia:", self.margen)
+        lay.addLayout(form)
+
+        # ── Resultado ─────────────────────────────────────────────────────────
+        lay.addWidget(_sep())
+        res_frame = QFrame()
+        res_frame.setStyleSheet(
+            f"QFrame {{ background:#F0FDF4; border:1px solid #86EFAC; "
+            f"border-radius:10px; }}"
+            f"QLabel {{ background:transparent; border:none; }}")
+        rl2 = QVBoxLayout(res_frame)
+        rl2.setContentsMargins(18, 14, 18, 14); rl2.setSpacing(8)
+
+        def _res_row(label, attr, color=C_TEXT, bold=False):
+            w = QWidget(); w.setStyleSheet("background:transparent;")
+            wl = QHBoxLayout(w); wl.setContentsMargins(0, 0, 0, 0)
+            k = QLabel(label)
+            k.setStyleSheet(f"font-size:11px; color:{C_MUTED};")
+            v = QLabel("—")
+            sz = "14" if bold else "12"
+            v.setStyleSheet(
+                f"font-size:{sz}px; font-weight:{'700' if bold else '600'}; "
+                f"color:{color};")
+            wl.addWidget(k); wl.addStretch(); wl.addWidget(v)
+            setattr(self, attr, v)
+            return w
+
+        rl2.addWidget(_res_row("Costo total (insumos + extras):",
+                               "_lbl_costo_total", C_TEXT))
+        rl2.addWidget(_res_row("Margen aplicado:",
+                               "_lbl_margen_bs", C_AMBER))
+
+        sep2 = QFrame(); sep2.setFrameShape(QFrame.Shape.HLine)
+        sep2.setStyleSheet("background:#86EFAC; max-height:1px;")
+        rl2.addWidget(sep2)
+
+        rl2.addWidget(_res_row("💰 Precio sugerido de venta:",
+                               "_lbl_precio_final", "#15803D", bold=True))
+        lay.addWidget(res_frame)
+
+        nota = QLabel(
+            "ℹ️ Este cálculo es orientativo. El precio final lo define el negocio.")
+        nota.setStyleSheet(f"font-size:10px; color:{C_MUTED};")
+        nota.setWordWrap(True); lay.addWidget(nota)
+
+        br = QHBoxLayout()
+        c = _btn_ghost("Cerrar"); c.clicked.connect(self.reject)
+        br.addWidget(c); br.addStretch()
+        lay.addLayout(br)
+
+    def _calcular(self):
+        costo_base = self._costo_insumos + self.extras.value()
+        margen_pct = self.margen.value() / 100.0
+        margen_bs  = costo_base * margen_pct
+        precio_sug = costo_base + margen_bs
+
+        self._lbl_costo_total.setText(f"Bs {costo_base:.4f}")
+        self._lbl_margen_bs.setText(
+            f"Bs {margen_bs:.4f}  ({self.margen.value():.1f}%)")
+        self._lbl_precio_final.setText(f"Bs {precio_sug:.2f}")
+
+
+
 class RecetasTab(QWidget):
     def __init__(self):
         super().__init__()
+        u = get_current_user()
+        self._es_admin = u.is_admin() if u else False
         self._build(); self.load_data()
 
     def _build(self):
@@ -1754,11 +1917,17 @@ class RecetasTab(QWidget):
             self.table.setItem(r, 2, ri_item)
 
             aw = QWidget(); aw.setStyleSheet("background:transparent;")
-            al = QHBoxLayout(aw); al.setContentsMargins(4, 3, 4, 3)
+            al = QHBoxLayout(aw); al.setContentsMargins(4, 3, 4, 3); al.setSpacing(4)
             lbl = "✏️ Editar" if tiene else "➕ Crear receta"
             eb  = _btn(lbl, C_BLUE if tiene else C_PRIMARY, small=True)
             eb.clicked.connect(partial(self._editar, p))
             al.addWidget(eb)
+            # Botón calcular costo — solo visible para admin y si tiene receta
+            if self._es_admin and tiene:
+                cb = _btn("💰", C_AMBER, small=True); cb.setFixedWidth(30)
+                cb.setToolTip("Calcular precio de venta sugerido")
+                cb.clicked.connect(partial(self._calcular_costo, p))
+                al.addWidget(cb)
             self.table.setCellWidget(r, 3, aw)
 
     def _editar(self, producto):
@@ -1769,6 +1938,10 @@ class RecetasTab(QWidget):
             else: QMessageBox.warning(
                 self, "Error", "No se pudo guardar la receta.")
 
+    def _calcular_costo(self, producto):
+        dlg = CostoDialog(producto, self)
+        dlg.exec()
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 3 — Compras
@@ -1776,8 +1949,12 @@ class RecetasTab(QWidget):
 
 class ComprasTab(QWidget):
     def __init__(self):
+        self._es_admin       = False
+        self._usuario_id_own = None
         super().__init__()
-        self._build(); self.load_data()
+        self._build()
+        self._init_usuarios()
+        self.load_data()
 
     def _build(self):
         lay = QVBoxLayout(self)
@@ -1786,10 +1963,31 @@ class ComprasTab(QWidget):
         bar, bl = _filter_bar()
         self.search = QLineEdit()
         self.search.setPlaceholderText("🔍 Buscar compra…")
-        self.search.setStyleSheet(_LE); self.search.setFixedWidth(200)
+        self.search.setStyleSheet(_LE); self.search.setFixedWidth(180)
         self.search.textChanged.connect(self.load_data); bl.addWidget(self.search)
 
+        bl.addWidget(_sep_v())
+        bl.addWidget(QLabel("Desde:"))
+        self.desde = QDateEdit(QDate.currentDate().addMonths(-1))
+        self.desde.setCalendarPopup(True); self.desde.setStyleSheet(_CB)
+        self.desde.dateChanged.connect(self.load_data); bl.addWidget(self.desde)
+
+        bl.addWidget(QLabel("Hasta:"))
+        self.hasta = QDateEdit(QDate.currentDate())
+        self.hasta.setCalendarPopup(True); self.hasta.setStyleSheet(_CB)
+        self.hasta.dateChanged.connect(self.load_data); bl.addWidget(self.hasta)
+
+        bl.addWidget(_sep_v())
+        bl.addWidget(QLabel("Usuario:"))
+        self.usuario_cb = QComboBox(); self.usuario_cb.setStyleSheet(_CB)
+        self.usuario_cb.setFixedWidth(140)
+        self.usuario_cb.currentIndexChanged.connect(self.load_data)
+        bl.addWidget(self.usuario_cb)
+
         bl.addStretch()
+        limpiar = _btn_ghost("↺"); limpiar.setFixedWidth(32)
+        limpiar.setToolTip("Limpiar filtros")
+        limpiar.clicked.connect(self._limpiar); bl.addWidget(limpiar)
         nb = _btn("➕ Nueva Compra", C_PRIMARY, small=True)
         nb.clicked.connect(self._nueva); bl.addWidget(nb)
         rf = _btn_ghost("🔄"); rf.setFixedWidth(36)
@@ -1801,7 +1999,7 @@ class ComprasTab(QWidget):
             ["Compra / Referencia", "Proveedor", "Ítems",
              "Total Bs", "Usuario", "Fecha"],
             col_widths=[(1, 110), (2, 50), (3, 85), (4, 100)],
-            stretch_cols=[0,5])
+            stretch_cols=[0, 5])
         self.table.doubleClicked.connect(self._ver_detalle)
         lay.addWidget(self.table)
 
@@ -1810,13 +2008,46 @@ class ComprasTab(QWidget):
         hint.setStyleSheet(f"font-size:10px; color:{C_MUTED}; padding:2px 0;")
         lay.addWidget(hint)
 
+    def _init_usuarios(self):
+        u = get_current_user()
+        self._es_admin       = u.is_admin() if u else False
+        self._usuario_id_own = u.id if u else None
+        if self._es_admin:
+            self.usuario_cb.addItem("Todos", None)
+            for usr in User.get_all():
+                self.usuario_cb.addItem(f"👤 {usr.nombre}", usr.id)
+        else:
+            self.usuario_cb.addItem(
+                f"👤 {u.nombre if u else '—'}", self._usuario_id_own)
+            self.usuario_cb.setEnabled(False)
+
+    def _limpiar(self):
+        self.search.clear()
+        self.desde.setDate(QDate.currentDate().addMonths(-1))
+        self.hasta.setDate(QDate.currentDate())
+        if self._es_admin: self.usuario_cb.setCurrentIndex(0)
+        self.load_data()
+
     def load_data(self):
-        term = self.search.text().strip().lower()
-        rows = db.fetch_all(
-            """SELECT p.*, u.nombre as usuario_nombre
+        term  = self.search.text().strip().lower()
+        desde = self.desde.date().toString("yyyy-MM-dd")
+        hasta = self.hasta.date().toString("yyyy-MM-dd") + " 23:59:59"
+        uid   = self.usuario_cb.currentData()
+
+        q = """SELECT p.*, u.nombre as usuario_nombre
                FROM paquetes_insumos p
                LEFT JOIN usuarios u ON p.usuario_id = u.id
-               ORDER BY p.fecha_registro DESC LIMIT 200""")
+               WHERE p.fecha_registro >= ? AND p.fecha_registro <= ?"""
+        params = [desde, hasta]
+
+        # Cajero solo ve sus propias compras
+        if uid:
+            q += " AND p.usuario_id = ?"; params.append(uid)
+        elif not self._es_admin:
+            q += " AND p.usuario_id = ?"; params.append(self._usuario_id_own)
+
+        q += " ORDER BY p.fecha_registro DESC LIMIT 200"
+        rows = db.fetch_all(q, tuple(params))
         if term:
             rows = [r for r in rows
                     if term in (r["nombre"] or "").lower()
