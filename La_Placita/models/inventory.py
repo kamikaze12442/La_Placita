@@ -50,10 +50,13 @@ class Insumo:
     @property
     def envase_label(self):
         """Ej: '1 caja = 24 huevos'"""
+        UNIDADES_A_UNIDADES = {"Paquete", "Caja", "Bolsa"}
+        unidad = self.unidad
+        unidad_txt = "unidades" if unidad in UNIDADES_A_UNIDADES else unidad
         if not self.tiene_envase:
             return None
         n = int(self.envase_cantidad) if self.envase_cantidad == int(self.envase_cantidad) else self.envase_cantidad
-        return f"1 {self.envase_tipo} = {n} {self.unidad}"
+        return f"1 {self.envase_tipo} = {n} {unidad_txt}"
 
     # ── CRUD ─────────────────────────────────────────────────────────────────
 
