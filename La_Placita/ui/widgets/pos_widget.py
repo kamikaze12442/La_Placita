@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
     QScrollArea, QHeaderView, QButtonGroup, QAbstractItemView
 )
 from PySide6.QtCore import Qt, Signal, QTimer
-from PySide6.QtGui import QFont, QColor
+from PySide6.QtGui import QFont, QColor, QPixmap
 from models.product import Product, Category
 from models.sale import Sale, SaleDetail
 from models.user import get_current_user
@@ -23,8 +23,36 @@ except ImportError:
     PRINTER_OK = False
 
 
+
+import os as _os
+
+_POS_IMG_DIR = _os.path.join(
+    _os.path.expanduser("~"), ".restaurant_pos", "images", "productos")
+
+def _pos_load_pixmap(imagen: str, w: int, h: int) -> "QPixmap":
+    """Carga imagen local recortada a w×h. Placeholder gris si falla."""
+    pm = QPixmap()
+    if imagen:
+        pm.load(imagen)
+    if pm.isNull():
+        pm = QPixmap(w, h)
+        pm.fill(QColor("#E5E7EB"))
+        return pm
+    pm = pm.scaled(w, h,
+                   Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                   Qt.TransformationMode.SmoothTransformation)
+    if pm.width() > w or pm.height() > h:
+        pm = pm.copy((pm.width() - w) // 2, (pm.height() - h) // 2, w, h)
+    return pm
+
 class ProductCard(QFrame):
+    """
+    Tarjeta de producto para el POS.
+    Imagen grande arriba · nombre · precio · indicador de stock.
+    """
     clicked = Signal(object)
+    CARD_W, CARD_H = 150, 185
+    IMG_W,  IMG_H  = 150, 95
 
     def __init__(self, product: Product):
         super().__init__()
@@ -32,39 +60,70 @@ class ProductCard(QFrame):
         self.init_ui()
 
     def init_ui(self):
-        self.setFixedSize(140, 120)
+        self.setFixedSize(self.CARD_W, self.CARD_H)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setStyleSheet("""
             ProductCard {
                 background-color: white;
-                border: 2px solid #E5E7EB;
-                border-radius: 10px;
-                padding: 10px;
+                border: 1.5px solid #E5E7EB;
+                border-radius: 12px;
             }
             ProductCard:hover {
                 border-color: #FF6B35;
-                background-color: #FFF5F2;
+                background-color: #FFFAF8;
             }
         """)
-        layout = QVBoxLayout(self)
-        layout.setSpacing(5)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 8)
+        lay.setSpacing(5)
 
-        name_label = QLabel(self.product.nombre)
-        name_label.setWordWrap(True)
-        name_label.setStyleSheet("font-weight: 600; font-size: 13px; color: #1F2937;")
-        name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(name_label)
+        # ── Imagen ─────────────────────────────────────────────────
+        img_lbl = QLabel()
+        img_lbl.setFixedSize(self.IMG_W, self.IMG_H)
+        img_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        img_lbl.setStyleSheet(
+            "border-top-left-radius: 11px;"
+            "border-top-right-radius: 11px;"
+            "background: #F1F5F9; border: none;")
+        img_lbl.setPixmap(
+            _pos_load_pixmap(self.product.imagen, self.IMG_W, self.IMG_H))
+        lay.addWidget(img_lbl)
 
-        price_label = QLabel(f"Bs {self.product.precio:.2f}")
-        price_label.setStyleSheet("color: #FF6B35; font-size: 14px; font-weight: 700;")
-        price_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(price_label)
+        # ── Nombre ─────────────────────────────────────────────────
+        name_lbl = QLabel(self.product.nombre)
+        name_lbl.setWordWrap(True)
+        name_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        name_lbl.setStyleSheet(
+            "font-weight: 600; font-size: 12px; color: #1F2937;"
+            "padding: 0 6px; background: transparent;")
+        name_lbl.setMaximumHeight(36)
+        lay.addWidget(name_lbl)
 
-        stock_color = "#10B981" if self.product.stock > 10 else "#F59E0B" if self.product.stock > 0 else "#EF4444"
-        stock_label = QLabel(f"Stock: {self.product.stock}")
-        stock_label.setStyleSheet(f"color: {stock_color}; font-size: 11px;")
-        stock_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(stock_label)
+        # ── Precio ─────────────────────────────────────────────────
+        price_lbl = QLabel(f"Bs {self.product.precio:.2f}")
+        price_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        price_lbl.setStyleSheet(
+            "color: #FF6B35; font-size: 15px; font-weight: 700;"
+            "background: transparent;")
+        lay.addWidget(price_lbl)
+
+        # ── Stock ──────────────────────────────────────────────────
+        disp = getattr(self.product, "disponible", 1)
+        if not disp:
+            stxt, scol = "Sin control", "#9CA3AF"
+        elif self.product.stock > 10:
+            stxt, scol = f"Stock: {self.product.stock}", "#10B981"
+        elif self.product.stock > 0:
+            stxt, scol = f"Stock: {self.product.stock}", "#F59E0B"
+        else:
+            stxt, scol = "Sin stock", "#EF4444"
+
+        stock_lbl = QLabel(stxt)
+        stock_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        stock_lbl.setStyleSheet(
+            f"color: {scol}; font-size: 10px; font-weight: 600;"
+            "background: transparent;")
+        lay.addWidget(stock_lbl)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -799,5 +858,3 @@ class POSWidget(QWidget):
         lay.addWidget(btn, alignment=Qt.AlignmentFlag.AlignRight)
 
         dlg.exec()
-
-   
