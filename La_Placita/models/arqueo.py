@@ -152,8 +152,9 @@ class ArqueoCaja:
 
         # Recalcular ventas del sistema al momento del cierre
         ventas = ArqueoCaja.calcular_ventas_sistema(arqueo.usuario_id, arqueo.fecha_inicio)
+        
 
-        dif_ef  = round(conteo_efectivo - ventas['efectivo'], 2)
+        dif_ef  = round(conteo_efectivo - (ventas['efectivo'] + arqueo.monto_inicial), 2)
         dif_qr  = round(conteo_qr       - ventas['qr'],       2)
         dif_tot = round(dif_ef + dif_qr,                      2)
 

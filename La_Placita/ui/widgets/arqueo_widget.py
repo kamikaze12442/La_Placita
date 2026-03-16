@@ -305,12 +305,13 @@ class CerrarCajaDialog(QDialog):
         sys_lay.addWidget(sys_cap)
 
         sys_lay.addSpacing(10)
+        monto_ini = getattr(self.arqueo, 'monto_inicial', 0) or 0
 
         v = self._ventas
         filas = [
-            ("💵", "Efectivo",     v['efectivo'],  "#4ADE80"),
+            ("💵", "Efectivo",    (self._ventas['efectivo'] + monto_ini),  "#4ADE80"),
             ("📱", "QR",           v['qr'],        "#60A5FA"),
-            ("🧾", "Total ventas", v['total'],     "#FB923C"),
+            ("🧾", "Total ventas", (self._ventas['total'] + monto_ini),     "#FB923C"),
         ]
         for emoji, lbl_txt, val, color in filas:
             row = QHBoxLayout()
@@ -452,12 +453,13 @@ class CerrarCajaDialog(QDialog):
                 txt = f"Bs {int(d)}" if d >= 1 else f"Bs {d:.2f}"
                 partes.append(f"{c}×{txt}")
         self._ef_detalle.setText("  +  ".join(partes) if partes else "Sin conteo aún")
+        monto_ini = getattr(self.arqueo, 'monto_inicial', 0) or 0
 
         # Diferencias
         vals = {
-            "ef":  round(ef  - self._ventas['efectivo'], 2),
+            "ef":  round(ef  - (self._ventas['efectivo'] + monto_ini), 2),
             "qr":  round(qr  - self._ventas['qr'],       2),
-            "tot": round((ef + qr) - self._ventas['total'], 2),
+            "tot": round((ef + qr) - (self._ventas['total'] + monto_ini), 2),
         }
         for key, val in vals.items():
             lbl = self._dif_labels[key]
