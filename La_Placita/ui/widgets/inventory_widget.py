@@ -517,7 +517,6 @@ class MovimientoDialog(QDialog):
 
         self.tipo = QComboBox(); self.tipo.setStyleSheet(_CB)
         self.tipo.addItem("📥  Entrada  (compra / reposición)", "entrada")
-        self.tipo.addItem("✏️  Ajuste manual",                  "ajuste")
         self.tipo.addItem("🗑️  Merma / Pérdida",                "merma")
         self.tipo.currentIndexChanged.connect(self._on_tipo)
         form.addRow("Tipo: *", self.tipo)
@@ -539,19 +538,30 @@ class MovimientoDialog(QDialog):
         # el modo envase está siempre activo y se puede desactivar manualmente
         _u = self.insumo.unidad.lower()
         self._es_unidad_envase = _u in {"caja", "bolsa", "paquete"}
+
+        #self._chk_envase = None
+
         if self.insumo.tiene_envase or self._es_unidad_envase:
-            lbl_env = (self.insumo.envase_label
-                       if self.insumo.tiene_envase
-                       else f"1 {_u} = {int(self.insumo.envase_cantidad)} unidades")
-            self._chk_envase = QCheckBox(
-                f"Ingresar por {self.insumo.unidad}  ({lbl_env})")
+
+            n = int(self.insumo.envase_cantidad or 1)
+
+            lbl_env = (
+                self.insumo.envase_label
+                if self.insumo.tiene_envase
+                else f"1 {_u} = {n} unidades"
+            )
+
+            self._chk_envase = QCheckBox()
             self._chk_envase.setStyleSheet(_CHK)
             self._chk_envase.setChecked(True)
-            self._chk_envase.toggled.connect(self._on_modo)
-            ef_lay.addWidget(self._chk_envase)
-        else:
-            self._chk_envase = None
 
+            self._lbl_env = lbl_env
+
+            self._chk_envase.toggled.connect(self._on_modo)
+
+            self._actualizar_texto_chk()
+
+            ef_lay.addWidget(self._chk_envase)
         # Frame modo ENVASE
         self._modo_env = _card_frame(C_BLUE)
         me_lay = QFormLayout(self._modo_env)
@@ -579,25 +589,26 @@ class MovimientoDialog(QDialog):
         ef_lay.addWidget(self._modo_env)
 
         # Frame modo DIRECTO
-        self._modo_dir = _card_frame()
+        self._modo_dir = _card_frame(C_BLUE)
         md_lay = QFormLayout(self._modo_dir)
         md_lay.setSpacing(10); md_lay.setContentsMargins(14, 12, 14, 12)
         md_lay.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        unidad_txt= "unidades" if self.insumo.unidad in {"Paquete","Caja","Bolsa"} else self.insumo.unidad
 
         self._cant_dir = QDoubleSpinBox()
-        self._cant_dir.setRange(0.001, 999999); self._cant_dir.setDecimals(3)
-        self._cant_dir.setSuffix(f"  {self.insumo.unidad}")
+        self._cant_dir.setRange(0.000, 999999); self._cant_dir.setDecimals(3)
+        self._cant_dir.setSuffix(f"  {unidad_txt}")
         self._cant_dir.setStyleSheet(_SP)
         self._cant_dir.valueChanged.connect(self._upd_preview)
-        md_lay.addRow(f"Cantidad ({self.insumo.unidad}):", self._cant_dir)
+        md_lay.addRow(f"Cantidad ({unidad_txt}):", self._cant_dir)
 
         self._precio_dir = QDoubleSpinBox()
-        self._precio_dir.setRange(0, 999999); self._precio_dir.setDecimals(4)
+        self._precio_dir.setRange(0, 999999); self._precio_dir.setDecimals(2)
         self._precio_dir.setPrefix("Bs ")
         self._precio_dir.setValue(self.insumo.costo_unitario)
         self._precio_dir.setStyleSheet(_SP)
         self._precio_dir.valueChanged.connect(self._upd_preview)
-        md_lay.addRow(f"Precio / {self.insumo.unidad}:", self._precio_dir)
+        md_lay.addRow(f"Precio / {unidad_txt}:", self._precio_dir)
 
         ef_lay.addWidget(self._modo_dir)
 
@@ -613,17 +624,16 @@ class MovimientoDialog(QDialog):
 
         lay.addWidget(self._entrada_frame)
 
-        # ── Bloque ajuste/merma ────────────────────────────────────────────────
+       # Solo unidades mínimas — registrar merma en cajas no tiene sentido
         self._otro_frame = _card_frame()
-        ot_lay = QFormLayout(self._otro_frame)
-        ot_lay.setSpacing(10); ot_lay.setContentsMargins(14, 12, 14, 12)
-        ot_lay.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-
+        of = QFormLayout(self._otro_frame)
+        of.setSpacing(10); of.setContentsMargins(14, 12, 14, 12)
+        of.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         self._cant_otro = QDoubleSpinBox()
-        self._cant_otro.setRange(0.001, 999999); self._cant_otro.setDecimals(3)
-        self._cant_otro.setSuffix(f"  {self.insumo.unidad}")
+        self._cant_otro.setRange(0.000, 999999); self._cant_otro.setDecimals(3)
+        self._cant_otro.setSuffix(f"  {unidad_txt}")
         self._cant_otro.setStyleSheet(_SP)
-        ot_lay.addRow(f"Cantidad ({self.insumo.unidad}):", self._cant_otro)
+        of.addRow(f"Cantidad ({unidad_txt}):", self._cant_otro)
         lay.addWidget(self._otro_frame)
 
         # ── Motivo ────────────────────────────────────────────────────────────
@@ -654,7 +664,27 @@ class MovimientoDialog(QDialog):
         self._on_tipo()
 
     # ── lógica interna ────────────────────────────────────────────────────────
+    def _actualizar_texto_chk(self):
+        if self._chk_envase.isChecked():
+            self._chk_envase.setText(
+                f"Ingresar por {self.insumo.unidad} ({self._lbl_env})"
+            )
+        else:
+            self._chk_envase.setText(
+                f"Ingresar por unidades ({self._lbl_env})")
+    def _on_modo_otro(self):
 
+        if not self._chk_envase_otro:
+            return
+
+        if self._chk_envase_otro.isChecked():
+            self._modo_env_otro.setVisible(True)
+            self._modo_dir_otro.setVisible(False)
+        else:
+            self._modo_env_otro.setVisible(False)
+            self._modo_dir_otro.setVisible(True)
+
+        self._upd_preview()
     def _on_tipo(self):
         es_entrada = self.tipo.currentData() == "entrada"
         self._entrada_frame.setVisible(es_entrada)
@@ -667,6 +697,7 @@ class MovimientoDialog(QDialog):
     def _on_modo(self, use_env):
         self._modo_env.setVisible(use_env)
         self._modo_dir.setVisible(not use_env)
+        self._actualizar_texto_chk()
         self._upd_preview()
 
     def _upd_preview(self):
@@ -767,10 +798,13 @@ class RecetaDialog(QDialog):
         self.ins_cb = QComboBox(); self.ins_cb.setStyleSheet(_CB)
         self.ins_cb.addItem("— Seleccionar insumo —", None)
         for ins in self._insumos:
-            self.ins_cb.addItem(f"{ins.nombre}  ({ins.unidad})", ins.id)
+            UNIDADES_A_UNIDADES = {"Paquete", "Caja", "Bolsa"}
+            unidad = ins.unidad
+            unidad_txt = "unidades" if unidad in UNIDADES_A_UNIDADES else unidad
+            self.ins_cb.addItem(f"{ins.nombre}  ({unidad_txt})", ins.id)
 
         self.cant_sp = QDoubleSpinBox()
-        self.cant_sp.setRange(0.001, 99999); self.cant_sp.setDecimals(3)
+        self.cant_sp.setRange(0.000, 99999); self.cant_sp.setDecimals(3)
         self.cant_sp.setFixedWidth(100); self.cant_sp.setStyleSheet(_SP)
 
         self._uni_lbl = QLabel("—")
@@ -808,14 +842,26 @@ class RecetaDialog(QDialog):
     def _upd_uni(self):
         ins = next(
             (i for i in self._insumos if i.id == self.ins_cb.currentData()),
-            None)
-        self._uni_lbl.setText(ins.unidad if ins else "—")
+            None
+        )
+
+        if not ins:
+            self._uni_lbl.setText("—")
+            return
+
+        UNIDADES_A_UNIDADES = {"Paquete", "Caja", "Bolsa"}
+
+        unidad = ins.unidad
+        unidad_txt = "unidades" if unidad in UNIDADES_A_UNIDADES else unidad
+
+        self._uni_lbl.setText(unidad_txt)
 
     def _cargar(self):
         items = Receta.get_por_producto(self.producto.id)
+        UNIDADES_A_UNIDADES = {"Paquete", "Caja", "Bolsa"}
         self._items = [
             {"insumo_id": ri.insumo_id, "insumo_nombre": ri.insumo_nombre,
-             "cantidad": ri.cantidad, "unidad": ri.insumo_unidad}
+             "cantidad": ri.cantidad, "unidad": 'unidades' if ri.insumo_unidad in UNIDADES_A_UNIDADES else ri.insumo_unidad}
             for ri in items]
         self._refresh()
 
@@ -825,6 +871,9 @@ class RecetaDialog(QDialog):
             QMessageBox.warning(self, "Falta insumo",
                                 "Selecciona un insumo de la lista."); return
         ins = next((i for i in self._insumos if i.id == ins_id), None)
+        UNIDADES_A_UNIDADES = {"Paquete", "Caja", "Bolsa"}
+        unidad = ins.unidad
+        unidad_txt = "unidades" if unidad in UNIDADES_A_UNIDADES else unidad
         if not ins: return
         for it in self._items:
             if it["insumo_id"] == ins_id:
@@ -832,7 +881,7 @@ class RecetaDialog(QDialog):
                 self._refresh(); return
         self._items.append({
             "insumo_id": ins_id, "insumo_nombre": ins.nombre,
-            "cantidad": self.cant_sp.value(), "unidad": ins.unidad})
+            "cantidad": self.cant_sp.value(), "unidad": unidad_txt})
         self.cant_sp.setValue(1.0); self._refresh()
 
     def _quitar(self, idx):
@@ -966,7 +1015,10 @@ class NuevaCompraDialog(QDialog):
         self.ins_cb = QComboBox(); self.ins_cb.setStyleSheet(_CB)
         self.ins_cb.addItem("— Elige un insumo de la lista —", None)
         for ins in self._insumos:
-            lbl = f"{ins.nombre}  ({ins.unidad})"
+            UNIDADES_A_UNIDADES = {"Paquete", "Caja", "Bolsa"}
+            unidad = ins.unidad
+            unidad_txt = "unidades" if unidad in UNIDADES_A_UNIDADES else unidad
+            lbl = f"{ins.nombre}  ({unidad_txt})"
             self.ins_cb.addItem(lbl, ins)
         self.ins_cb.currentIndexChanged.connect(self._on_insumo_sel)
         left_lay.addWidget(self.ins_cb)
@@ -1068,7 +1120,7 @@ class NuevaCompraDialog(QDialog):
         self._lbl_cant_dir = QLabel("Cantidad")
         self._lbl_cant_dir.setStyleSheet(f"font-size:11px;font-weight:600;color:{C_MUTED};")
         self._cant_dir_c = QDoubleSpinBox()
-        self._cant_dir_c.setRange(0.001,999999); self._cant_dir_c.setDecimals(3)
+        self._cant_dir_c.setRange(0.000,999999); self._cant_dir_c.setDecimals(3)
         self._cant_dir_c.setStyleSheet(_SP)
         self._cant_dir_c.valueChanged.connect(self._upd_preview)
         d1.addWidget(self._lbl_cant_dir); d1.addWidget(self._cant_dir_c)
@@ -1216,14 +1268,18 @@ class NuevaCompraDialog(QDialog):
 
     def _es_envase(self, ins=None):
         ins = ins or self._ins()
+        UNIDADES_A_UNIDADES = {"Paquete", "Caja", "Bolsa"}
+        unidad = ins.unidad
+        unidad_txt = "unidades" if unidad in UNIDADES_A_UNIDADES else unidad
         if ins is None: return False
-        return ins.unidad.lower() in self._ENVASE_U or ins.tiene_envase
+        return unidad_txt.lower() in self._ENVASE_U or ins.tiene_envase
 
     def _modo_env_activo(self):
         return self._btn_modo_env.isChecked()
 
     def _on_insumo_sel(self):
         ins = self._ins()
+        
         if ins is None:
             self._info_frame.setVisible(False)
             self._toggle_frame.setVisible(False)
@@ -1232,32 +1288,34 @@ class NuevaCompraDialog(QDialog):
             self._prev_frame.setVisible(False)
             self._btn_add.setEnabled(False)
             return
-
+        UNIDADES_A_UNIDADES = {"Paquete", "Caja", "Bolsa"}
+        unidad = ins.unidad
+        unidad_txt = "unidades" if unidad in UNIDADES_A_UNIDADES else unidad
         # Pills de info
         sc = (C_RED if ins.stock_actual <= 0
               else C_AMBER if ins.stock_bajo else C_GREEN)
         self._set_pill(self._pill_stock,
-                       f"{ins.stock_actual:.2f} {ins.unidad}", sc)
+                       f"{ins.stock_actual:.2f} {unidad_txt}", sc)
 
         if ins.tiene_envase:
             n = int(ins.envase_cantidad) if ins.envase_cantidad == int(ins.envase_cantidad) else ins.envase_cantidad
-            env_txt = f"1 {ins.envase_tipo} = {n} {ins.unidad}"
-        elif ins.unidad.lower() in self._ENVASE_U:
+            env_txt = f"1 {ins.envase_tipo} = {n} {unidad_txt}"
+        elif unidad_txt.lower() in self._ENVASE_U:
             n = int(ins.envase_cantidad) if ins.envase_cantidad == int(ins.envase_cantidad) else ins.envase_cantidad
-            env_txt = f"1 {ins.unidad} = {n} unidades"
+            env_txt = f"1 {unidad_txt} = {n} unidades"
         else:
             env_txt = "Sin envase"
         self._set_pill(self._pill_envase, env_txt,
                        C_BLUE if self._es_envase(ins) else C_MUTED)
 
         p_unit = ins.costo_unitario
-        self._set_pill(self._pill_precio, f"Bs {p_unit:.4f} / {ins.unidad}", C_TEXT)
+        self._set_pill(self._pill_precio, f"Bs {p_unit:.4f} / {unidad_txt}", C_TEXT)
         self._info_frame.setVisible(True)
 
         es_env = self._es_envase(ins)
         # Toggle modo
         if es_env:
-            tipo = ins.envase_tipo or ins.unidad
+            tipo = ins.envase_tipo or unidad_txt
             n = int(ins.envase_cantidad) if ins.envase_cantidad == int(ins.envase_cantidad) else ins.envase_cantidad
             self._btn_modo_env.setText(f"Por {tipo}  ({n} und.)")
             self._btn_modo_dir.setText("Por unidad")
@@ -1270,13 +1328,13 @@ class NuevaCompraDialog(QDialog):
             self._toggle_frame.setVisible(False)
 
         # Labels dinámicos
-        tipo_env = ins.envase_tipo or ins.unidad
+        tipo_env = ins.envase_tipo or unidad_txt
         self._lbl_n_env.setText(f"Cantidad de {tipo_env}s")
         self._lbl_precio_env.setText(f"Precio por {tipo_env}")
-        self._lbl_cant_dir.setText(f"Cantidad  ({ins.unidad})")
-        self._lbl_precio_dir.setText(f"Precio por {ins.unidad}")
+        self._lbl_cant_dir.setText(f"Cantidad  ({unidad_txt})")
+        self._lbl_precio_dir.setText(f"Precio por {unidad_txt}")
         self._n_env_c.setSuffix(f"  {tipo_env}(s)")
-        self._cant_dir_c.setSuffix(f"  {ins.unidad}")
+        self._cant_dir_c.setSuffix(f"  {unidad_txt}")
 
         # Precios sugeridos
         precio_env_sug = ins.costo_unitario * ins.envase_cantidad
@@ -1307,21 +1365,24 @@ class NuevaCompraDialog(QDialog):
             self._prev_frame.setVisible(False); return
 
         if self._modo_env_activo() and self._es_envase(ins):
+            UNIDADES_A_UNIDADES = {"Paquete", "Caja", "Bolsa"}
+            unidad = ins.unidad
+            unidad_txt = "unidades" if unidad in UNIDADES_A_UNIDADES else unidad
             n       = self._n_env_c.value()
             uds     = ins.envase_cantidad
             total_u = n * uds
             prec_e  = self._precio_env_c.value()
             prec_u  = prec_e / uds if uds > 0 else 0
-            tipo    = ins.envase_tipo or ins.unidad
+            tipo    = ins.envase_tipo or unidad_txt
             self._prev_main.setText(
-                f"+{total_u:.3g} {ins.unidad}  ·  Total  Bs {n * prec_e:.2f}")
+                f"+{total_u:.3g} {unidad_txt}  ·  Total  Bs {n * prec_e:.2f}")
             self._prev_sub.setText(
-                f"Bs {prec_e:.2f} por {tipo} ÷ {int(uds)} unidades = Bs {prec_u:.4f} / {ins.unidad}")
+                f"Bs {prec_e:.2f} por {tipo} ÷ {int(uds)} unidades = Bs {prec_u:.4f} / {unidad_txt}")
         else:
             cant  = self._cant_dir_c.value()
             prec  = self._precio_dir_c.value()
             self._prev_main.setText(
-                f"+{cant:.3g} {ins.unidad}"
+                f"+{cant:.3g} {unidad_txt}"
                 + (f"  ·  Total  Bs {cant*prec:.2f}" if prec > 0 else ""))
             self._prev_sub.setText("")
 
@@ -1332,12 +1393,15 @@ class NuevaCompraDialog(QDialog):
         if ins is None: return
 
         if self._modo_env_activo() and self._es_envase(ins):
+            UNIDADES_A_UNIDADES = {"Paquete", "Caja", "Bolsa"}
+            unidad = ins.unidad
+            unidad_txt = "unidades" if unidad in UNIDADES_A_UNIDADES else unidad
             n_env    = self._n_env_c.value()
             uds      = ins.envase_cantidad
             cantidad = n_env * uds
             prec_e   = self._precio_env_c.value()
             precio_u = prec_e / uds if uds > 0 else 0
-            tipo_env = ins.envase_tipo or ins.unidad
+            tipo_env = ins.envase_tipo or unidad_txt
             nota_env = f"{int(n_env)} {tipo_env}(s)  ×  {int(uds)} unidades = {int(cantidad)} unidades"
         else:
             cantidad = self._cant_dir_c.value()
@@ -1509,9 +1573,8 @@ class InsumosTab(QWidget):
             8,
             ["Insumo", "Categoría", "Stock", "Mínimo",
              "Unidad", "Envase", "Estado", "Acciones"],
-            col_widths=[(2, 80), (3, 70), (4, 70),
-                        (5, 130), (6, 95), (7, 155)],
-            stretch_cols=[0, 1]
+            col_widths=[(2, 80), (3, 70), (4, 70), (6, 95), (7, 155)],
+            stretch_cols=[0, 1, 5]
         )
         lay.addWidget(self.table)
 
@@ -1542,6 +1605,9 @@ class InsumosTab(QWidget):
 
         self.table.setRowCount(len(ins))
         for r, i in enumerate(ins):
+            UNIDADES_A_UNIDADES = {"Paquete", "Caja", "Bolsa"}
+            unidad = i.unidad
+            unidad_txt = "unidades" if unidad in UNIDADES_A_UNIDADES else unidad
             self.table.setItem(r, 0, QTableWidgetItem(i.nombre))
             self.table.setItem(r, 1, QTableWidgetItem(i.categoria or "—"))
 
@@ -1556,7 +1622,7 @@ class InsumosTab(QWidget):
             sm.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self.table.setItem(r, 3, sm)
 
-            un = QTableWidgetItem(i.unidad)
+            un = QTableWidgetItem(unidad_txt)
             un.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self.table.setItem(r, 4, un)
 
@@ -1618,9 +1684,172 @@ class InsumosTab(QWidget):
 # TAB 2 — Recetas
 # ─────────────────────────────────────────────────────────────────────────────
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Diálogo — Calcular costo de un producto (solo admin)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class CostoDialog(QDialog):
+    """
+    Calcula el precio de venta sugerido de un producto con receta.
+    Factores: costo de insumos + otros costos extra + margen de ganancia %.
+    Solo visible para administradores.
+    """
+    def __init__(self, producto, parent=None):
+        super().__init__(parent)
+        self.producto = producto
+        self.setWindowTitle(f"💰 Calcular costo — {producto.nombre}")
+        self.setMinimumWidth(480)
+        self.setStyleSheet(
+            f"QDialog {{ background:{C_BG}; }}"
+            f"QLabel {{ background:transparent; }}")
+        self._receta = Receta.get_por_producto(producto.id)
+        self._costo_insumos = sum(
+            ri.cantidad * (Insumo.get_by_id(ri.insumo_id).costo_unitario
+                           if Insumo.get_by_id(ri.insumo_id) else 0)
+            for ri in self._receta
+        )
+        self._build()
+        self._calcular()
+
+    def _build(self):
+        lay = QVBoxLayout(self)
+        lay.setSpacing(14); lay.setContentsMargins(24, 22, 24, 20)
+
+        title = QLabel("💰  Calcular precio de venta")
+        title.setStyleSheet(f"font-size:16px; font-weight:700; color:{C_TEXT};")
+        lay.addWidget(title)
+        sub = QLabel(f"Producto: <b>{self.producto.nombre}</b>")
+        sub.setTextFormat(Qt.TextFormat.RichText)
+        sub.setStyleSheet(f"font-size:12px; color:{C_MUTED};")
+        lay.addWidget(sub)
+        lay.addWidget(_sep())
+
+        # ── Costo de insumos (readonly) ───────────────────────────────────────
+        lay.addWidget(_lbl_section("COSTO DE INSUMOS  (según receta)"))
+        ins_frame = _card_frame()
+        ifl = QVBoxLayout(ins_frame)
+        ifl.setContentsMargins(14, 10, 14, 10); ifl.setSpacing(4)
+
+        UNIDADES_ENVASE = {"Paquete", "Caja", "Bolsa"}
+        if self._receta:
+            for ri in self._receta:
+                ins = Insumo.get_by_id(ri.insumo_id)
+                costo_ri = ri.cantidad * (ins.costo_unitario if ins else 0)
+                unidad_txt = ("unidades" if ins and ins.unidad in UNIDADES_ENVASE
+                              else (ins.unidad if ins else ""))
+                row_w = QWidget(); row_w.setStyleSheet("background:transparent;")
+                rl = QHBoxLayout(row_w); rl.setContentsMargins(0, 2, 0, 2)
+                nm = QLabel(f"{ri.insumo_nombre}  ×  {ri.cantidad:.3g} {unidad_txt}")
+                nm.setStyleSheet(f"font-size:11px; color:{C_TEXT};")
+                ct = QLabel(f"Bs {costo_ri:.4f}")
+                ct.setStyleSheet(f"font-size:11px; font-weight:600; color:{C_AMBER};")
+                rl.addWidget(nm); rl.addStretch(); rl.addWidget(ct)
+                ifl.addWidget(row_w)
+            sep_w = QFrame(); sep_w.setFrameShape(QFrame.Shape.HLine)
+            sep_w.setStyleSheet(f"background:{C_BORDER}; max-height:1px;")
+            ifl.addWidget(sep_w)
+        else:
+            nl = QLabel("Sin receta — no hay insumos registrados.")
+            nl.setStyleSheet(f"font-size:11px; color:{C_MUTED};")
+            ifl.addWidget(nl)
+
+        total_row = QWidget(); total_row.setStyleSheet("background:transparent;")
+        trl = QHBoxLayout(total_row); trl.setContentsMargins(0, 4, 0, 0)
+        tl = QLabel("Total insumos:")
+        tl.setStyleSheet(f"font-size:12px; font-weight:700; color:{C_TEXT};")
+        self._lbl_insumos = QLabel(f"Bs {self._costo_insumos:.4f}")
+        self._lbl_insumos.setStyleSheet(
+            f"font-size:13px; font-weight:700; color:{C_AMBER};")
+        trl.addWidget(tl); trl.addStretch(); trl.addWidget(self._lbl_insumos)
+        ifl.addWidget(total_row)
+        lay.addWidget(ins_frame)
+
+        # ── Factores adicionales ──────────────────────────────────────────────
+        lay.addWidget(_lbl_section("FACTORES ADICIONALES"))
+        form = QFormLayout(); form.setSpacing(10)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+
+        self.extras = QDoubleSpinBox()
+        self.extras.setRange(0, 999999); self.extras.setDecimals(2)
+        self.extras.setPrefix("Bs ")
+        self.extras.setToolTip("Empaque, transporte, gas, electricidad, etc.")
+        self.extras.setStyleSheet(_SP)
+        self.extras.valueChanged.connect(self._calcular)
+        form.addRow("Otros costos (Bs):", self.extras)
+
+        self.margen = QDoubleSpinBox()
+        self.margen.setRange(0, 1000); self.margen.setDecimals(1)
+        self.margen.setSuffix("  %"); self.margen.setValue(30.0)
+        self.margen.setStyleSheet(_SP)
+        self.margen.valueChanged.connect(self._calcular)
+        form.addRow("Margen de ganancia:", self.margen)
+        lay.addLayout(form)
+
+        # ── Resultado ─────────────────────────────────────────────────────────
+        lay.addWidget(_sep())
+        res_frame = QFrame()
+        res_frame.setStyleSheet(
+            f"QFrame {{ background:#F0FDF4; border:1px solid #86EFAC; "
+            f"border-radius:10px; }}"
+            f"QLabel {{ background:transparent; border:none; }}")
+        rl2 = QVBoxLayout(res_frame)
+        rl2.setContentsMargins(18, 14, 18, 14); rl2.setSpacing(8)
+
+        def _res_row(label, attr, color=C_TEXT, bold=False):
+            w = QWidget(); w.setStyleSheet("background:transparent;")
+            wl = QHBoxLayout(w); wl.setContentsMargins(0, 0, 0, 0)
+            k = QLabel(label)
+            k.setStyleSheet(f"font-size:11px; color:{C_MUTED};")
+            v = QLabel("—")
+            sz = "14" if bold else "12"
+            v.setStyleSheet(
+                f"font-size:{sz}px; font-weight:{'700' if bold else '600'}; "
+                f"color:{color};")
+            wl.addWidget(k); wl.addStretch(); wl.addWidget(v)
+            setattr(self, attr, v)
+            return w
+
+        rl2.addWidget(_res_row("Costo total (insumos + extras):",
+                               "_lbl_costo_total", C_TEXT))
+        rl2.addWidget(_res_row("Margen aplicado:",
+                               "_lbl_margen_bs", C_AMBER))
+
+        sep2 = QFrame(); sep2.setFrameShape(QFrame.Shape.HLine)
+        sep2.setStyleSheet("background:#86EFAC; max-height:1px;")
+        rl2.addWidget(sep2)
+
+        rl2.addWidget(_res_row("💰 Precio sugerido de venta:",
+                               "_lbl_precio_final", "#15803D", bold=True))
+        lay.addWidget(res_frame)
+
+        nota = QLabel(
+            "ℹ️ Este cálculo es orientativo. El precio final lo define el negocio.")
+        nota.setStyleSheet(f"font-size:10px; color:{C_MUTED};")
+        nota.setWordWrap(True); lay.addWidget(nota)
+
+        br = QHBoxLayout()
+        c = _btn_ghost("Cerrar"); c.clicked.connect(self.reject)
+        br.addWidget(c); br.addStretch()
+        lay.addLayout(br)
+
+    def _calcular(self):
+        costo_base = self._costo_insumos + self.extras.value()
+        margen_pct = self.margen.value() / 100.0
+        margen_bs  = costo_base * margen_pct
+        precio_sug = costo_base + margen_bs
+
+        self._lbl_costo_total.setText(f"Bs {costo_base:.4f}")
+        self._lbl_margen_bs.setText(
+            f"Bs {margen_bs:.4f}  ({self.margen.value():.1f}%)")
+        self._lbl_precio_final.setText(f"Bs {precio_sug:.2f}")
+
+
+
 class RecetasTab(QWidget):
     def __init__(self):
         super().__init__()
+        u = get_current_user()
+        self._es_admin = u.is_admin() if u else False
         self._build(); self.load_data()
 
     def _build(self):
@@ -1688,11 +1917,17 @@ class RecetasTab(QWidget):
             self.table.setItem(r, 2, ri_item)
 
             aw = QWidget(); aw.setStyleSheet("background:transparent;")
-            al = QHBoxLayout(aw); al.setContentsMargins(4, 3, 4, 3)
+            al = QHBoxLayout(aw); al.setContentsMargins(4, 3, 4, 3); al.setSpacing(4)
             lbl = "✏️ Editar" if tiene else "➕ Crear receta"
             eb  = _btn(lbl, C_BLUE if tiene else C_PRIMARY, small=True)
             eb.clicked.connect(partial(self._editar, p))
             al.addWidget(eb)
+            # Botón calcular costo — solo visible para admin y si tiene receta
+            if self._es_admin and tiene:
+                cb = _btn("💰", C_AMBER, small=True); cb.setFixedWidth(30)
+                cb.setToolTip("Calcular precio de venta sugerido")
+                cb.clicked.connect(partial(self._calcular_costo, p))
+                al.addWidget(cb)
             self.table.setCellWidget(r, 3, aw)
 
     def _editar(self, producto):
@@ -1703,6 +1938,10 @@ class RecetasTab(QWidget):
             else: QMessageBox.warning(
                 self, "Error", "No se pudo guardar la receta.")
 
+    def _calcular_costo(self, producto):
+        dlg = CostoDialog(producto, self)
+        dlg.exec()
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 3 — Compras
@@ -1710,8 +1949,12 @@ class RecetasTab(QWidget):
 
 class ComprasTab(QWidget):
     def __init__(self):
+        self._es_admin       = False
+        self._usuario_id_own = None
         super().__init__()
-        self._build(); self.load_data()
+        self._build()
+        self._init_usuarios()
+        self.load_data()
 
     def _build(self):
         lay = QVBoxLayout(self)
@@ -1720,10 +1963,31 @@ class ComprasTab(QWidget):
         bar, bl = _filter_bar()
         self.search = QLineEdit()
         self.search.setPlaceholderText("🔍 Buscar compra…")
-        self.search.setStyleSheet(_LE); self.search.setFixedWidth(200)
+        self.search.setStyleSheet(_LE); self.search.setFixedWidth(180)
         self.search.textChanged.connect(self.load_data); bl.addWidget(self.search)
 
+        bl.addWidget(_sep_v())
+        bl.addWidget(QLabel("Desde:"))
+        self.desde = QDateEdit(QDate.currentDate().addMonths(-1))
+        self.desde.setCalendarPopup(True); self.desde.setStyleSheet(_CB)
+        self.desde.dateChanged.connect(self.load_data); bl.addWidget(self.desde)
+
+        bl.addWidget(QLabel("Hasta:"))
+        self.hasta = QDateEdit(QDate.currentDate())
+        self.hasta.setCalendarPopup(True); self.hasta.setStyleSheet(_CB)
+        self.hasta.dateChanged.connect(self.load_data); bl.addWidget(self.hasta)
+
+        bl.addWidget(_sep_v())
+        bl.addWidget(QLabel("Usuario:"))
+        self.usuario_cb = QComboBox(); self.usuario_cb.setStyleSheet(_CB)
+        self.usuario_cb.setFixedWidth(140)
+        self.usuario_cb.currentIndexChanged.connect(self.load_data)
+        bl.addWidget(self.usuario_cb)
+
         bl.addStretch()
+        limpiar = _btn_ghost("↺"); limpiar.setFixedWidth(32)
+        limpiar.setToolTip("Limpiar filtros")
+        limpiar.clicked.connect(self._limpiar); bl.addWidget(limpiar)
         nb = _btn("➕ Nueva Compra", C_PRIMARY, small=True)
         nb.clicked.connect(self._nueva); bl.addWidget(nb)
         rf = _btn_ghost("🔄"); rf.setFixedWidth(36)
@@ -1735,7 +1999,7 @@ class ComprasTab(QWidget):
             ["Compra / Referencia", "Proveedor", "Ítems",
              "Total Bs", "Usuario", "Fecha"],
             col_widths=[(1, 110), (2, 50), (3, 85), (4, 100)],
-            stretch_cols=[0,5])
+            stretch_cols=[0, 5])
         self.table.doubleClicked.connect(self._ver_detalle)
         lay.addWidget(self.table)
 
@@ -1744,13 +2008,46 @@ class ComprasTab(QWidget):
         hint.setStyleSheet(f"font-size:10px; color:{C_MUTED}; padding:2px 0;")
         lay.addWidget(hint)
 
+    def _init_usuarios(self):
+        u = get_current_user()
+        self._es_admin       = u.is_admin() if u else False
+        self._usuario_id_own = u.id if u else None
+        if self._es_admin:
+            self.usuario_cb.addItem("Todos", None)
+            for usr in User.get_all():
+                self.usuario_cb.addItem(f"👤 {usr.nombre}", usr.id)
+        else:
+            self.usuario_cb.addItem(
+                f"👤 {u.nombre if u else '—'}", self._usuario_id_own)
+            self.usuario_cb.setEnabled(False)
+
+    def _limpiar(self):
+        self.search.clear()
+        self.desde.setDate(QDate.currentDate().addMonths(-1))
+        self.hasta.setDate(QDate.currentDate())
+        if self._es_admin: self.usuario_cb.setCurrentIndex(0)
+        self.load_data()
+
     def load_data(self):
-        term = self.search.text().strip().lower()
-        rows = db.fetch_all(
-            """SELECT p.*, u.nombre as usuario_nombre
+        term  = self.search.text().strip().lower()
+        desde = self.desde.date().toString("yyyy-MM-dd")
+        hasta = self.hasta.date().toString("yyyy-MM-dd") + " 23:59:59"
+        uid   = self.usuario_cb.currentData()
+
+        q = """SELECT p.*, u.nombre as usuario_nombre
                FROM paquetes_insumos p
                LEFT JOIN usuarios u ON p.usuario_id = u.id
-               ORDER BY p.fecha_registro DESC LIMIT 200""")
+               WHERE p.fecha_registro >= ? AND p.fecha_registro <= ?"""
+        params = [desde, hasta]
+
+        # Cajero solo ve sus propias compras
+        if uid:
+            q += " AND p.usuario_id = ?"; params.append(uid)
+        elif not self._es_admin:
+            q += " AND p.usuario_id = ?"; params.append(self._usuario_id_own)
+
+        q += " ORDER BY p.fecha_registro DESC LIMIT 200"
+        rows = db.fetch_all(q, tuple(params))
         if term:
             rows = [r for r in rows
                     if term in (r["nombre"] or "").lower()
