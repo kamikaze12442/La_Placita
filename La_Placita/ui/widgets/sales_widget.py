@@ -18,7 +18,7 @@ from models.user import User
 from database.connection import db
 from utils.pdf_generator import InvoiceGenerator
 from utils.excel_exporter import ExcelExporter
-
+from utils.pdf_generator import generate_invoice, generate_sales_report
 
 class StatCard(QFrame):
     """Stat card con fondo de color."""
@@ -163,6 +163,8 @@ class TopProductCard(QFrame):
         layout.addStretch()
         
         return widget
+    
+    
 
 
 class SalesWidget(QWidget):
@@ -174,6 +176,32 @@ class SalesWidget(QWidget):
         self.current_sales = []
         self.init_ui()
         self.load_sales()
+    def _make_btn_icono(self, emoji, color, color_hover, color_pressed, ancho=32):
+        """Botón con emoji perfectamente centrado usando QLabel overlay."""
+        contenedor = QWidget()
+        contenedor.setFixedSize(ancho, 28)
+        
+        # Botón de fondo (sin texto)
+        btn = QPushButton("", contenedor)
+        btn.setFixedSize(ancho, 28)
+        btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {color};
+                border: none;
+                border-radius: 5px;
+            }}
+            QPushButton:hover {{ background-color: {color_hover}; }}
+            QPushButton:pressed {{ background-color: {color_pressed}; }}
+        """)
+        
+        # Label con el emoji centrado encima
+        lbl = QLabel(emoji, contenedor)
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl.setFixedSize(ancho, 28)
+        lbl.setStyleSheet("background: transparent; font-size: 13px;")
+        lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)  # 👈 clicks pasan al botón
+        
+        return contenedor, btn
     
     def init_ui(self):
         """Initialize UI"""
@@ -493,10 +521,12 @@ class SalesWidget(QWidget):
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)
-        self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        
         #self.table.verticalHeader().setDefaultSectionSize(150)
         self.table.setColumnWidth(7, 180)
+        self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         self.main_layout.addWidget(self.table)
+
     
     def load_sales(self):
         """Load sales with filters"""
@@ -636,41 +666,25 @@ class SalesWidget(QWidget):
             self.table.setItem(row, 6, fecha_item)
             
             # Acciones
-            actions_widget = QWidget()
-            actions_layout = QHBoxLayout(actions_widget)
-            actions_layout.setContentsMargins(1, 1, 1, 1)
-            actions_layout.setSpacing(1)
-            
-            view_btn = QPushButton("👁")
-            view_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #3B82F6;
-                    color: white;
-                    border-radius: 6px;
-                    padding: 4px 4px;
-                    
-                }
-                QPushButton:hover { background-color: #2563EB; }
-            """)
+            aw = QWidget()
+            aw.setStyleSheet("background: transparent;")
+            al = QHBoxLayout(aw)
+            al.setContentsMargins(2, 0, 2, 0)
+            al.setSpacing(4)
+            al.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+            view_w, view_btn = self._make_btn_icono("👁", "#3B82F6", "#2563EB", "#1D4ED8")
+            view_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             view_btn.clicked.connect(lambda checked=False, s=sale: self.view_sale_detail(s))
-            actions_layout.addWidget(view_btn)
-            
-            print_btn = QPushButton("🖨️")
-            print_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #10B981;
-                    color: white;
-                    border-radius: 6px;
-                    padding: 4px 4px;
-                    
-                    
-                }
-                QPushButton:hover { background-color: #059669; }
-            """)
+
+            print_w, print_btn = self._make_btn_icono("🖨️", "#10B981", "#059669", "#047857")
+            print_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             print_btn.clicked.connect(lambda checked=False, s=sale: self.print_invoice(s))
-            actions_layout.addWidget(print_btn)
-            
-            self.table.setCellWidget(row, 7, actions_widget)
+
+            al.addWidget(view_w)
+            al.addWidget(print_w)
+
+            self.table.setCellWidget(row, 7, aw)
             self.table.setRowHeight(row, 60)
     
     def _update_chart(self):
@@ -1018,37 +1032,31 @@ class SalesWidget(QWidget):
         dialog.exec()
     
     def print_invoice(self, sale_dict):
-        """Print invoice"""
         sale = Sale.get_by_id(sale_dict['id'])
         if not sale:
             return
-        
         try:
-            filepath = InvoiceGenerator.generate_invoice(sale)
+            filepath = generate_invoice(sale)  # 👈 función de conveniencia
             QMessageBox.information(self, "Éxito", f"Factura generada:\n{filepath}")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error al generar factura:\n{str(e)}")
-    
+
     def print_report(self):
-        """Print report"""
         QMessageBox.information(self, "Imprimir", "Enviando a impresora...")
-    
+
     def generate_pdf(self):
-        """Generate PDF report"""
         if not self.current_sales:
             QMessageBox.warning(self, "Sin datos", "No hay ventas para generar PDF")
             return
-        
         try:
             fecha_desde = self.fecha_inicial.date().toString("yyyy-MM-dd")
             fecha_hasta = self.fecha_final.date().toString("yyyy-MM-dd")
             
-            # Convert to Sale objects
             sales = [Sale.get_by_id(s['id']) for s in self.current_sales]
             sales = [s for s in sales if s is not None]
             
             filename = f"ventas_{fecha_desde}_{fecha_hasta}.pdf"
-            filepath = InvoiceGenerator.generate_sales_report(sales, filename, fecha_desde, fecha_hasta)
+            filepath = generate_sales_report(sales, filename, fecha_desde, fecha_hasta)  # 👈
             
             QMessageBox.information(self, "Éxito", f"Reporte PDF generado:\n{filepath}")
         except Exception as e:

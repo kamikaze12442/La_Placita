@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem, QPushButton, QLabel, QLineEdit, QMessageBox,
     QDialog, QFormLayout, QComboBox, QHeaderView,
     QFrame, QDoubleSpinBox, QSpinBox, QScrollArea, QTextEdit,
-    QSizePolicy, QDateEdit, QCheckBox, QAbstractItemView
+    QSizePolicy, QDateEdit, QCheckBox, QAbstractItemView, QAbstractScrollArea
 )
 from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QColor
@@ -89,7 +89,7 @@ _CB = f"""
 _TBL = f"""
     QTableWidget {{ background:{C_WHITE}; border:none; font-size:12px;
                    gridline-color:{C_BORDER}; outline:none; color:{C_TEXT}; }}
-    QTableWidget::item {{ padding:6px 10px; border-bottom:1px solid {C_BORDER}; }}
+    QTableWidget::item {{ padding:4px 8px; border-bottom:1px solid {C_BORDER}; }}
     QTableWidget::item:selected {{ background:#FFF0EB; color:{C_TEXT}; }}
     QHeaderView::section {{ background:{C_BG}; font-size:11px; font-weight:700;
                            color:{C_MUTED}; border:none; padding:6px 10px;
@@ -167,6 +167,32 @@ def _filter_bar():
     lay = QHBoxLayout(f); lay.setContentsMargins(14, 10, 14, 10); lay.setSpacing(8)
     return f, lay
 
+def _make_btn_icono(emoji, color, color_hover, color_pressed, ancho=32):
+    """Botón con emoji perfectamente centrado usando QLabel overlay."""
+    contenedor = QWidget()
+    contenedor.setFixedSize(ancho, 28)
+    
+    # Botón de fondo (sin texto)
+    btn = QPushButton("", contenedor)
+    btn.setFixedSize(ancho, 28)
+    btn.setStyleSheet(f"""
+        QPushButton {{
+            background-color: {color};
+            border: none;
+            border-radius: 5px;
+        }}
+        QPushButton:hover {{ background-color: {color_hover}; }}
+        QPushButton:pressed {{ background-color: {color_pressed}; }}
+    """)
+    
+    # Label con el emoji centrado encima
+    lbl = QLabel(emoji, contenedor)
+    lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    lbl.setFixedSize(ancho, 28)
+    lbl.setStyleSheet("background: transparent; font-size: 13px;")
+    lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)  # 👈 clicks pasan al botón
+    
+    return contenedor, btn
 
 def _make_table(cols, headers, col_widths=None, stretch_cols=None):
     t = QTableWidget()
@@ -186,6 +212,9 @@ def _make_table(cols, headers, col_widths=None, stretch_cols=None):
     t.setShowGrid(False)
     t.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
     t.setStyleSheet(_TBL)
+    t.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+    t.setSizeAdjustPolicy(QAbstractScrollArea.SizeAdjustPolicy.AdjustToContents)
+    
     return t
 
 
@@ -539,7 +568,7 @@ class MovimientoDialog(QDialog):
         _u = self.insumo.unidad.lower()
         self._es_unidad_envase = _u in {"caja", "bolsa", "paquete"}
 
-        #self._chk_envase = None
+        self._chk_envase = None
 
         if self.insumo.tiene_envase or self._es_unidad_envase:
 
@@ -665,6 +694,9 @@ class MovimientoDialog(QDialog):
 
     # ── lógica interna ────────────────────────────────────────────────────────
     def _actualizar_texto_chk(self):
+        if not self._chk_envase:
+            return
+        
         if self._chk_envase.isChecked():
             self._chk_envase.setText(
                 f"Ingresar por {self.insumo.unidad} ({self._lbl_env})"
@@ -672,7 +704,9 @@ class MovimientoDialog(QDialog):
         else:
             self._chk_envase.setText(
                 f"Ingresar por unidades ({self._lbl_env})")
-    def _on_modo_otro(self):
+            
+
+        """def _on_modo_otro(self):
 
         if not self._chk_envase_otro:
             return
@@ -683,8 +717,10 @@ class MovimientoDialog(QDialog):
         else:
             self._modo_env_otro.setVisible(False)
             self._modo_dir_otro.setVisible(True)
+      
+        self._upd_preview()"""
 
-        self._upd_preview()
+        
     def _on_tipo(self):
         es_entrada = self.tipo.currentData() == "entrada"
         self._entrada_frame.setVisible(es_entrada)
@@ -1573,7 +1609,7 @@ class InsumosTab(QWidget):
             8,
             ["Insumo", "Categoría", "Stock", "Mínimo",
              "Unidad", "Envase", "Estado", "Acciones"],
-            col_widths=[(2, 80), (3, 70), (4, 70), (6, 95), (7, 155)],
+            col_widths=[(2, 80), (3, 70), (4, 70), (6, 95), (7, 90)],
             stretch_cols=[0, 1, 5]
         )
         lay.addWidget(self.table)
@@ -1604,6 +1640,8 @@ class InsumosTab(QWidget):
         elif filtro == "cero": ins = [i for i in ins if i.stock_actual <= 0]
 
         self.table.setRowCount(len(ins))
+
+        
         for r, i in enumerate(ins):
             UNIDADES_A_UNIDADES = {"Paquete", "Caja", "Bolsa"}
             unidad = i.unidad
@@ -1641,15 +1679,28 @@ class InsumosTab(QWidget):
             self.table.setItem(r, 6, ei)
 
             # Acciones
-            aw = QWidget(); aw.setStyleSheet("background:transparent;")
+            aw = QWidget()
+            aw.setStyleSheet("background: transparent;")
             al = QHBoxLayout(aw)
-            al.setContentsMargins(4, 2, 4, 2); al.setSpacing(4)
-            mb = _btn("📥 Entrada", C_GREEN, small=True)
+            al.setContentsMargins(4, 2, 4, 2)
+            al.setSpacing(4)
+            al.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+            mb_w, mb = _make_btn_icono("📥", "#27ae60", "#2ecc71", "#1e8449")
+            mb.setCursor(Qt.CursorShape.PointingHandCursor)
             mb.clicked.connect(partial(self._movimiento, i))
-            eb = _btn("✏️", C_AMBER, small=True); eb.setFixedWidth(32)
+
+            eb_w, eb = _make_btn_icono("✏️", "#e67e22", "#f39c12", "#ca6f1e")
+            eb.setCursor(Qt.CursorShape.PointingHandCursor)
             eb.clicked.connect(partial(self._editar, i))
-            al.addWidget(mb); al.addWidget(eb)
+
+            al.addWidget(mb_w)
+            al.addWidget(eb_w)
+            #self.table.setColumnWidth(7, 190)  # columna Acciones más ancha
             self.table.setCellWidget(r, 7, aw)
+            self.table.setColumnWidth(7, 90)
+        self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
+        self.table.verticalHeader().setDefaultSectionSize(42)
 
     def _nuevo(self):
         dlg = InsumoDialog(parent=self)
@@ -1916,7 +1967,7 @@ class RecetasTab(QWidget):
                 ri_item.setForeground(QColor(C_MUTED))
             self.table.setItem(r, 2, ri_item)
 
-            aw = QWidget(); aw.setStyleSheet("background:transparent;")
+            """ aw = QWidget(); aw.setStyleSheet("background:transparent;")
             al = QHBoxLayout(aw); al.setContentsMargins(4, 3, 4, 3); al.setSpacing(4)
             lbl = "✏️ Editar" if tiene else "➕ Crear receta"
             eb  = _btn(lbl, C_BLUE if tiene else C_PRIMARY, small=True)
@@ -1928,7 +1979,36 @@ class RecetasTab(QWidget):
                 cb.setToolTip("Calcular precio de venta sugerido")
                 cb.clicked.connect(partial(self._calcular_costo, p))
                 al.addWidget(cb)
+            self.table.setCellWidget(r, 3, aw) """
+
+
+            # Acciones
+            aw = QWidget()
+            aw.setStyleSheet("background: transparent;")
+            al = QHBoxLayout(aw)
+            al.setContentsMargins(2, 0, 2, 0)
+            al.setSpacing(2)
+            al.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+            tiene_dos_botones = self._es_admin and tiene
+            eb_w, eb = _make_btn_icono("✏️" if tiene else "➕", "#27ae60", "#2ecc71", "#1e8449",
+                            ancho=56 if not tiene_dos_botones else 28)
+            eb.setCursor(Qt.CursorShape.PointingHandCursor)
+            eb.clicked.connect(partial(self._editar, p))
+            al.addWidget(eb_w)
+
+            if self._es_admin and tiene:
+                cb_w, cb = _make_btn_icono("💰", "#e67e22", "#f39c12", "#ca6f1e")
+                cb.setCursor(Qt.CursorShape.PointingHandCursor)
+                cb.clicked.connect(partial(self._calcular_costo, p))
+                al.addWidget(cb_w)
+
             self.table.setCellWidget(r, 3, aw)
+            #self.table.setColumnWidth(7, 190)  # columna Acciones más ancha
+        self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
+        self.table.verticalHeader().setDefaultSectionSize(42)
+
+            
 
     def _editar(self, producto):
         dlg = RecetaDialog(producto, self)
