@@ -49,9 +49,10 @@ class ImagePickerWidget(QWidget):
     """
     W, H = 120, 120
 
-    def __init__(self, imagen_actual: str = None, parent=None):
+    def __init__(self, imagen_actual: str = None, read_only: bool = False, parent=None):
         super().__init__(parent)
         self._imagen = imagen_actual
+        self._read_only = read_only
         self._build()
 
     def _build(self):
@@ -79,8 +80,10 @@ class ImagePickerWidget(QWidget):
                 padding: 6px 14px; font-size: 11px; font-weight: 600;
             }
             QPushButton:hover { background: #2563EB; }
+            QPushButton:disabled { background: #9CA3AF; }
         """)
         self._btn_upload.clicked.connect(self._pick_file)
+        self._btn_upload.setEnabled(not self._read_only)
 
         self._btn_del = QPushButton("🗑")
         self._btn_del.setStyleSheet("""
@@ -90,9 +93,11 @@ class ImagePickerWidget(QWidget):
                 padding: 6px 10px; font-size: 11px; font-weight: 700;
             }
             QPushButton:hover { background: #EF4444; color: white; }
+            QPushButton:disabled { background: #E5E7EB; color: #9CA3AF; }
         """)
         self._btn_del.clicked.connect(self._remove)
         self._btn_del.setVisible(bool(self._imagen))
+        self._btn_del.setEnabled(not self._read_only)
 
         btn_row.addWidget(self._btn_upload)
         btn_row.addWidget(self._btn_del)
@@ -113,6 +118,8 @@ class ImagePickerWidget(QWidget):
                 "background: #F8FAFC; color: #9CA3AF; font-size: 11px;")
 
     def _pick_file(self):
+        if self._read_only:
+            return
         path, _ = QFileDialog.getOpenFileName(
             self, "Seleccionar imagen",
             os.path.expanduser("~"),
@@ -128,6 +135,8 @@ class ImagePickerWidget(QWidget):
         self._btn_del.setVisible(True)
 
     def _remove(self):
+        if self._read_only:
+            return
         self._imagen = None
         self._refresh_preview()
         self._btn_del.setVisible(False)
@@ -142,14 +151,17 @@ class ImagePickerWidget(QWidget):
 
 class ProductDialog(QDialog):
 
-    def __init__(self, product=None, parent=None):
+    def __init__(self, product=None, read_only: bool = False, parent=None):
         super().__init__(parent)
         self.product = product
-        self.setWindowTitle("Editar Producto" if product else "Agregar Producto")
+        self.read_only = read_only
+        self.setWindowTitle("Ver Producto" if read_only else ("Editar Producto" if product else "Agregar Producto"))
         self.setMinimumWidth(580)
         self.init_ui()
         if product:
             self.load_product_data()
+        if read_only:
+            self.setWindowTitle("Editar Stock" if product else "Ver Producto")
 
     def init_ui(self):
         layout = QVBoxLayout(self)
@@ -167,31 +179,40 @@ class ProductDialog(QDialog):
 
         self.name_input = QLineEdit()
         self.name_input.setPlaceholderText("Ej: Café Espresso")
+        self.name_input.setReadOnly(self.read_only)
         form.addRow("Nombre: *", self.name_input)
 
         self.description_input = QTextEdit()
         self.description_input.setMaximumHeight(68)
         self.description_input.setPlaceholderText("Descripción opcional…")
+        self.description_input.setReadOnly(self.read_only)
         form.addRow("Descripción:", self.description_input)
 
         self.category_combo = QComboBox()
         self.load_categories()
+        self.category_combo.setEnabled(not self.read_only)
         form.addRow("Categoría: *", self.category_combo)
 
         self.price_input = QDoubleSpinBox()
         self.price_input.setRange(0.01, 99999.99)
         self.price_input.setDecimals(2)
         self.price_input.setPrefix("Bs ")
+        self.price_input.setReadOnly(self.read_only)
+        self.price_input.setButtonSymbols(QDoubleSpinBox.ButtonSymbols.NoButtons if self.read_only else QDoubleSpinBox.ButtonSymbols.UpDownArrows)
         form.addRow("Precio: *", self.price_input)
 
         self.cost_input = QDoubleSpinBox()
         self.cost_input.setRange(0.00, 99999.99)
         self.cost_input.setDecimals(2)
         self.cost_input.setPrefix("Bs ")
+        self.cost_input.setReadOnly(self.read_only)
+        self.cost_input.setButtonSymbols(QDoubleSpinBox.ButtonSymbols.NoButtons if self.read_only else QDoubleSpinBox.ButtonSymbols.UpDownArrows)
         form.addRow("Costo:", self.cost_input)
 
         self.stock_input = QSpinBox()
         self.stock_input.setRange(0, 99999)
+        # El stock siempre es editable (incluso en modo read_only para cajeros)
+        # Pero si es read_only y no es admin, solo permitimos editar stock
         form.addRow("Stock: *", self.stock_input)
 
         left = QWidget()
@@ -216,7 +237,8 @@ class ProductDialog(QDialog):
         rl.addWidget(img_title)
 
         self.img_picker = ImagePickerWidget(
-            imagen_actual=self.product.imagen if self.product else None)
+            imagen_actual=self.product.imagen if self.product else None,
+            read_only=self.read_only)
         rl.addWidget(self.img_picker)
 
         hint = QLabel("jpg · png · webp")
@@ -228,10 +250,19 @@ class ProductDialog(QDialog):
         layout.addLayout(body)
 
         # Botones
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Save |
-            QDialogButtonBox.StandardButton.Cancel
-        )
+        buttons = QDialogButtonBox()
+        if self.read_only:
+            # En modo solo lectura (cajero editando solo stock), mostramos Guardar y Cancelar
+            buttons.setStandardButtons(
+                QDialogButtonBox.StandardButton.Save |
+                QDialogButtonBox.StandardButton.Cancel
+            )
+        else:
+            buttons.setStandardButtons(
+                QDialogButtonBox.StandardButton.Save |
+                QDialogButtonBox.StandardButton.Cancel
+            )
+        
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -277,8 +308,15 @@ class ProductDialog(QDialog):
         return True
 
     def accept(self):
-        if self.validate():
+        if self.read_only:
+            # En modo solo lectura (cajero), solo validamos que el stock sea válido
+            if self.stock_input.value() < 0:
+                QMessageBox.warning(self, "Campo requerido", "El stock no puede ser negativo.")
+                return
             super().accept()
+        else:
+            if self.validate():
+                super().accept()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -305,16 +343,19 @@ class ProductsWidget(QWidget):
         title.setStyleSheet("font-size: 24px; font-weight: bold; color: #1F2937;")
         header.addWidget(title)
         header.addStretch()
-        add_btn = QPushButton("➕ Agregar Producto")
-        add_btn.setStyleSheet("""
+        
+        self.add_btn = QPushButton("➕ Agregar Producto")
+        self.add_btn.setStyleSheet("""
             QPushButton {
                 background-color: #FF6B35; color: white;
                 padding: 10px 20px; border-radius: 8px; font-weight: 600;
             }
             QPushButton:hover { background-color: #E55A2B; }
+            QPushButton:disabled { background-color: #9CA3AF; }
         """)
-        add_btn.clicked.connect(self.add_product)
-        header.addWidget(add_btn)
+        self.add_btn.clicked.connect(self.add_product)
+        self.add_btn.setEnabled(self._es_admin)  # Solo admin puede agregar
+        header.addWidget(self.add_btn)
         layout.addLayout(header)
 
         # Filtros
@@ -444,6 +485,10 @@ class ProductsWidget(QWidget):
                         background: #FEF3C7; color: #92400E;
                         border-color: #FCD34D;
                     }
+                    QPushButton:disabled {
+                        background: #E5E7EB; color: #9CA3AF;
+                        border-color: #D1D5DB;
+                    }
                 """)
                 def _make_toggle(p, btn):
                     def _t(checked):
@@ -451,6 +496,7 @@ class ProductsWidget(QWidget):
                         btn.setText("✅ Con stock" if checked else "🔓 Sin stock")
                     return _t
                 sb.toggled.connect(_make_toggle(product, sb))
+                sb.setEnabled(self._es_admin)  # Solo admin puede usar el toggle
                 self.table.setCellWidget(row, 7, sb)
                 ac = 8
             else:
@@ -461,22 +507,28 @@ class ProductsWidget(QWidget):
             al = QHBoxLayout(aw)
             al.setContentsMargins(4, 2, 4, 2); al.setSpacing(4)
 
+            # Botón Editar
             eb = QPushButton("✏️")
             eb.setStyleSheet("""
                 QPushButton { background: #3B82F6; color: white; border: none;
                     border-radius: 5px; padding: 5px 10px; }
                 QPushButton:hover { background: #2563EB; }
+                QPushButton:disabled { background: #9CA3AF; }
             """)
             eb.clicked.connect(lambda checked=False, p=product: self.edit_product(p))
+            eb.setEnabled(True)  # Todos pueden editar (con restricciones)
             al.addWidget(eb)
 
+            # Botón Eliminar (solo admin)
             db_ = QPushButton("🗑️")
             db_.setStyleSheet("""
                 QPushButton { background: #EF4444; color: white; border: none;
                     border-radius: 5px; padding: 5px 10px; }
                 QPushButton:hover { background: #DC2626; }
+                QPushButton:disabled { background: #9CA3AF; }
             """)
             db_.clicked.connect(lambda checked=False, p=product: self.delete_product(p))
+            db_.setEnabled(self._es_admin)  # Solo admin puede eliminar
             al.addWidget(db_)
 
             self.table.setCellWidget(row, ac, aw)
@@ -490,6 +542,9 @@ class ProductsWidget(QWidget):
     # ── CRUD ──────────────────────────────────────────────────────────
 
     def add_product(self):
+        if not self._es_admin:
+            QMessageBox.warning(self, "Acceso denegado", "Solo los administradores pueden agregar productos.")
+            return
         dlg = ProductDialog(parent=self)
         if dlg.exec():
             data = dlg.get_product_data()
@@ -503,18 +558,38 @@ class ProductsWidget(QWidget):
                 QMessageBox.critical(self, "Error", "No se pudo agregar el producto.")
 
     def edit_product(self, product: Product):
-        dlg = ProductDialog(product=product, parent=self)
+        if self._es_admin:
+            # Admin puede editar todo
+            dlg = ProductDialog(product=product, parent=self)
+        else:
+            # Cajero solo puede editar stock (modo solo lectura para el resto)
+            dlg = ProductDialog(product=product, read_only=True, parent=self)
+        
         if dlg.exec():
             data = dlg.get_product_data()
-            if Product.update(product.id, **data):
-                QMessageBox.information(
-                    self, "Éxito",
-                    f"Producto '{data['nombre']}' actualizado correctamente.")
-                self.load_products()
+            if self._es_admin:
+                # Admin actualiza todo
+                if Product.update(product.id, **data):
+                    QMessageBox.information(
+                        self, "Éxito",
+                        f"Producto '{data['nombre']}' actualizado correctamente.")
+                    self.load_products()
+                else:
+                    QMessageBox.critical(self, "Error", "No se pudo actualizar el producto.")
             else:
-                QMessageBox.critical(self, "Error", "No se pudo actualizar el producto.")
+                # Cajero solo actualiza el stock
+                if Product.update_stock(product.id, data['stock']):
+                    QMessageBox.information(
+                        self, "Éxito",
+                        f"Stock del producto '{product.nombre}' actualizado correctamente.")
+                    self.load_products()
+                else:
+                    QMessageBox.critical(self, "Error", "No se pudo actualizar el stock.")
 
     def delete_product(self, product: Product):
+        if not self._es_admin:
+            QMessageBox.warning(self, "Acceso denegado", "Solo los administradores pueden eliminar productos.")
+            return
         reply = QMessageBox.question(
             self, "Confirmar eliminación",
             f"¿Eliminar '{product.nombre}'?\nEsta acción no se puede deshacer.",
