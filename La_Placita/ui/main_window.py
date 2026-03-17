@@ -157,12 +157,13 @@ class MainWindow(QMainWindow):
             self._nav_data.append((icon, text))
 
         add("🏠", "Inicio",          self.show_home_page)
-        if self.current_user.is_admin():
-            add("🛍️", "Productos",   self.show_products_page)
+        # TODOS los usuarios (admin y cajero) pueden ver productos
+        add("🛍️", "Productos",       self.show_products_page)
         add("💰", "Punto de Venta",  self.show_pos_page)
         add("🧾", "Ventas",          self.show_sales_page)
         add("🏦", "Arqueo de Caja",  self.show_arqueo_page)
         add("📦", "Inventario",      self.show_inventory_page)
+        # Solo admin puede ver Finanzas y Usuarios
         if self.current_user.is_admin():
             add("📊", "Finanzas",    self.show_finance_page)
             add("👥", "Usuarios",    self.show_users_page)
@@ -242,30 +243,36 @@ class MainWindow(QMainWindow):
         self.create_pages()
 
     def create_pages(self):
+        # Página de inicio (todos)
         self.home_page = self.create_home_page()
         self.stacked_widget.addWidget(self.home_page)
 
-        if self.current_user.is_admin():
-            from ui.widgets.products_widget import ProductsWidget
-            self.products_page = ProductsWidget()
-            self.stacked_widget.addWidget(self.products_page)
+        # Página de productos (TODOS: admin y cajero)
+        from ui.widgets.products_widget import ProductsWidget
+        self.products_page = ProductsWidget()
+        self.stacked_widget.addWidget(self.products_page)
 
+        # Página de punto de venta (todos)
         from ui.widgets.pos_widget import POSWidget
         self.pos_page = POSWidget()
         self.stacked_widget.addWidget(self.pos_page)
 
+        # Página de ventas (todos)
         from ui.widgets.sales_widget import SalesWidget
         self.sales_page = SalesWidget()
         self.stacked_widget.addWidget(self.sales_page)
 
+        # Página de arqueo (todos)
         from ui.widgets.arqueo_widget import ArqueoWidget
         self.arqueo_page = ArqueoWidget()
         self.stacked_widget.addWidget(self.arqueo_page)
 
+        # Página de inventario (todos)
         from ui.widgets.inventory_widget import InventoryWidget
         self.inventory_page = InventoryWidget()
         self.stacked_widget.addWidget(self.inventory_page)
 
+        # Páginas solo para admin
         if self.current_user.is_admin():
             from ui.widgets.finance_widget import FinanceWidget
             self.finance_page = FinanceWidget()
@@ -275,9 +282,10 @@ class MainWindow(QMainWindow):
             self.users_page = UsersWidget()
             self.stacked_widget.addWidget(self.users_page)
 
-        
-        
-    
+        # Página de configuración (todos) - asumiendo que existe
+        """ from ui.widgets.settings_widget import SettingsWidget
+        self.settings_page = SettingsWidget()
+        self.stacked_widget.addWidget(self.settings_page) """
 
     def create_home_page(self):
         from ui.widgets.home_widget import HomeWidget
@@ -294,35 +302,51 @@ class MainWindow(QMainWindow):
         self._go(self.home_page, 0)
 
     def show_products_page(self):
+        # Todos pueden ver productos ahora
+        # El índice depende de si es admin o no (porque admin tiene más botones)
         if self.current_user.is_admin():
-            self._go(self.products_page, 1)
+            self._go(self.products_page, 1)  # Admin: productos es el segundo botón
+        else:
+            self._go(self.products_page, 1)  # Cajero: productos también es el segundo botón
 
     def show_pos_page(self):
-        idx = 2 if self.current_user.is_admin() else 1
-        self._go(self.pos_page, idx)
+        if self.current_user.is_admin():
+            self._go(self.pos_page, 2)  # Admin: POS es el tercer botón
+        else:
+            self._go(self.pos_page, 2)  # Cajero: POS es el tercer botón
 
     def show_sales_page(self):
-        idx = 3 if self.current_user.is_admin() else 2
-        self._go(self.sales_page, idx)
+        if self.current_user.is_admin():
+            self._go(self.sales_page, 3)  # Admin: Ventas es el cuarto botón
+        else:
+            self._go(self.sales_page, 3)  # Cajero: Ventas es el cuarto botón
 
     def show_arqueo_page(self):
-        idx = 4 if self.current_user.is_admin() else 3
-        self._go(self.arqueo_page, idx)
+        if self.current_user.is_admin():
+            self._go(self.arqueo_page, 4)  # Admin: Arqueo es el quinto botón
+        else:
+            self._go(self.arqueo_page, 4)  # Cajero: Arqueo es el quinto botón
 
     def show_inventory_page(self):
-        idx = 5 if self.current_user.is_admin() else 4
-        self._go(self.inventory_page, idx)
+        if self.current_user.is_admin():
+            self._go(self.inventory_page, 5)  # Admin: Inventario es el sexto botón
+        else:
+            self._go(self.inventory_page, 5)  # Cajero: Inventario es el sexto botón
 
     def show_finance_page(self):
         if self.current_user.is_admin():
-            self._go(self.finance_page, 6)
+            self._go(self.finance_page, 6)  # Admin: Finanzas es el séptimo botón
 
     def show_users_page(self):
         if self.current_user.is_admin():
-            self._go(self.users_page, 7)
+            self._go(self.users_page, 7)  # Admin: Usuarios es el octavo botón
 
     def show_settings_page(self):
-        self._go(self.settings_page, len(self.nav_buttons) - 1)
+        # Configuración es el último botón para ambos roles
+        if self.current_user.is_admin():
+            self._go(self.settings_page, 8)  # Admin: Configuración es el noveno
+        else:
+            self._go(self.settings_page, 6)  # Cajero: Configuración es el séptimo
 
     # ── Status bar ────────────────────────────────────────────────────
 
