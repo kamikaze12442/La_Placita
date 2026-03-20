@@ -34,9 +34,8 @@ def _encode(texto: str) -> bytes:
     """Convierte texto a bytes cp437 (compatible con impresoras térmicas)."""
     return texto.encode("cp437", errors="replace")
 
-
-def _build_recibo(sale, nombre_negocio, subtitulo, telefono, mensaje_pie,
-                  abrir_cajon: bool = False) -> bytes:
+def _build_recibo(sale, nombre_negocio, nombre, subtitulo, telefono,
+                  mensaje_pie, abrir_cajon: bool = False) -> bytes:
     """Construye el recibo completo como bytes ESC/POS."""
     ANCHO = 32
     buf = bytearray()
@@ -50,57 +49,94 @@ def _build_recibo(sale, nombre_negocio, subtitulo, telefono, mensaje_pie,
     def sep(c="-"):
         add(_encode(c * ANCHO) + b'\n')
 
-    # ── Inicializar ───────────────────────────────────────────────────
+    def fila(izq, der, ancho=ANCHO):
+        """Fila con texto izquierda y derecha alineados."""
+        espacio = ancho - len(izq) - len(der)
+        linea(izq + " " * max(1, espacio) + der)
+
+    # ── Inicializar ───────────────────────────────────────────────
     add(INIT)
 
-    # ── Encabezado ────────────────────────────────────────────────────
+    # ── Encabezado ────────────────────────────────────────────────
     add(ALIGN_CENTER + BOLD_ON + DOUBLE_ON)
     linea(nombre_negocio)
-    add(DOUBLE_OFF + BOLD_OFF)
-    linea(subtitulo)
+    add(DOUBLE_OFF)
+    linea(nombre)
+    add(BOLD_OFF)
+    if subtitulo:
+        linea(subtitulo)
     if telefono:
-        linea(telefono)
+        linea(f"Tel: {telefono}")
     add(ALIGN_LEFT)
     sep("=")
 
-    # ── Datos de la venta ─────────────────────────────────────────────
-    fecha = datetime.fromisoformat(sale.fecha_venta).strftime("%d/%m/%Y  %H:%M")
+    # ── Datos de la venta ─────────────────────────────────────────
+    fecha = datetime.fromisoformat(
+        sale.fecha_venta).strftime("%d/%m/%Y  %H:%M")
     linea(f"Factura : {sale.numero_factura}")
     linea(f"Fecha   : {fecha}")
     linea(f"Cliente : {sale.cliente or 'Cliente General'}")
-    metodos = {"efectivo": "Efectivo", "qr": "QR", "tarjeta": "Tarjeta"}
+    metodos = {
+        "efectivo": "Efectivo",
+        "qr":       "QR",
+        "tarjeta":  "Tarjeta",
+        "mixto":    "Mixto",
+    }
     linea(f"Pago    : {metodos.get(sale.metodo_pago, sale.metodo_pago.title())}")
+
+    # Desglose pago mixto
+    if sale.metodo_pago == "mixto":
+        if getattr(sale, 'monto_efectivo', 0):
+            fila("  Efectivo:", f"Bs {sale.monto_efectivo:.2f}")
+        if getattr(sale, 'monto_qr', 0):
+            fila("  QR:",       f"Bs {sale.monto_qr:.2f}")
+
     sep()
 
-    # ── Cabecera de items ─────────────────────────────────────────────
+    # ── Cabecera de items ─────────────────────────────────────────
     add(BOLD_ON)
     linea(f"{'Producto':<18}{'Cant':>4}{'Total':>10}")
     add(BOLD_OFF)
     sep()
 
-    # ── Items ─────────────────────────────────────────────────────────
+    # ── Agrupar productos repetidos ───────────────────────────────
+    from collections import defaultdict
+    agrupado = {}
+    orden    = []
     for item in sale.items:
-        nombre = item.producto_nombre[:17]
-        cant   = str(item.cantidad)
-        total  = f"Bs {item.subtotal:.2f}"
-        linea(f"{nombre:<18}{cant:>4}{total:>10}")
-        if item.cantidad > 1:
-            linea(f"  @ Bs {item.precio_unitario:.2f} c/u")
+        key = item.producto_nombre
+        if key not in agrupado:
+            agrupado[key] = {"cantidad": 0, "precio": item.precio_unitario,
+                             "subtotal": 0}
+            orden.append(key)
+        agrupado[key]["cantidad"] += item.cantidad
+        agrupado[key]["subtotal"] += item.subtotal
+
+    # ── Items ─────────────────────────────────────────────────────
+    for key in orden:
+        vals   = agrupado[key]
+        nombre_prod = key[:17]
+        cant   = str(vals["cantidad"])
+        total  = f"Bs {vals['subtotal']:.2f}"
+        linea(f"{nombre_prod:<18}{cant:>4}{total:>10}")
+        if vals["cantidad"] > 1:
+            linea(f"  @ Bs {vals['precio']:.2f} c/u")
 
     sep("=")
 
-    # ── Totales ───────────────────────────────────────────────────────
+    # ── Totales ───────────────────────────────────────────────────
+    add(ALIGN_RIGHT)
     if sale.descuento and sale.descuento > 0:
-        add(ALIGN_RIGHT)
-        linea(f"Subtotal:  Bs {sale.subtotal:.2f}")
-        linea(f"Descuento: Bs {sale.descuento:.2f}")
+        fila("Subtotal:", f"Bs {sale.subtotal:.2f}")
+        fila("Descuento:", f"- Bs {sale.descuento:.2f}")
+        sep()
 
-    add(ALIGN_RIGHT + BOLD_ON + DOUBLE_ON)
+    add(BOLD_ON + DOUBLE_ON)
     linea(f"TOTAL: Bs {sale.total:.2f}")
     add(DOUBLE_OFF + BOLD_OFF + ALIGN_LEFT)
     sep("=")
 
-    # ── Pie ───────────────────────────────────────────────────────────
+    # ── Pie ───────────────────────────────────────────────────────
     add(ALIGN_CENTER)
     for linea_pie in mensaje_pie.split("\n"):
         linea(linea_pie)
@@ -108,15 +144,12 @@ def _build_recibo(sale, nombre_negocio, subtitulo, telefono, mensaje_pie,
     add(FEED_3)
     add(CUT)
 
-    # ── Cajón de dinero ───────────────────────────────────────────────
-    # Solo se abre si el pago fue en efectivo o mixto (no en QR/tarjeta)
+    # ── Cajón de dinero ───────────────────────────────────────────
     metodo = getattr(sale, 'metodo_pago', '') or ''
     if abrir_cajon and metodo.lower() in ('efectivo', 'mixto'):
         add(DRAWER_PIN2)
 
     return bytes(buf)
-
-
 def _build_prueba() -> bytes:
     """Construye una página de prueba como bytes ESC/POS."""
     ANCHO = 32
@@ -198,9 +231,10 @@ def _imprimir_bytes(data: bytes) -> tuple:
 # ── API pública ───────────────────────────────────────────────────────────────
 
 def imprimir_recibo(sale,
-                    nombre_negocio: str = "Cafeteria La Placita",
+                    nombre_negocio: str = "La Placita",
+                    nombre:str=("Cafeteria & Heladeria"),
                     subtitulo: str = "Sucursal Santa Fe",
-                    telefono: str = "",
+                    telefono: str = "77113371",
                     mensaje_pie: str = "Gracias por su visita!\nVuelva pronto",
                     abrir_cajon: bool = True) -> tuple:
     """
@@ -209,7 +243,7 @@ def imprimir_recibo(sale,
                         (solo actúa si el método de pago es efectivo o mixto)
     """
     try:
-        data = _build_recibo(sale, nombre_negocio, subtitulo, telefono,
+        data = _build_recibo(sale, nombre_negocio,nombre, subtitulo, telefono,
                              mensaje_pie, abrir_cajon)
         return _imprimir_bytes(data)
     except Exception as e:
