@@ -8,6 +8,8 @@ import sqlite3
 import os
 from pathlib import Path
 from typing import Optional
+import threading 
+from datetime import datetime  
 
 
 class DatabaseManager:
@@ -78,6 +80,8 @@ class DatabaseManager:
             cursor = self._connection.cursor()
             cursor.executescript(schema_sql)
             self._connection.commit()
+            self._run_migrations()
+            self._schedule_backup()
             print("✔ Base de datos inicializada correctamente")
         except sqlite3.Error as e:
             print(f"✗ Error al inicializar base de datos: {e}")
@@ -85,7 +89,69 @@ class DatabaseManager:
         except Exception as e:
             print(f"✗ Error inesperado: {e}")
             raise
-    
+    def _run_migrations(self):
+        """Aplica columnas faltantes en tablas existentes (idempotente)."""
+        cur = self._connection.cursor()
+
+        def cols(tabla):
+            cur.execute(f"PRAGMA table_info({tabla})")
+            return {row[1] for row in cur.fetchall()}
+
+        def add_col(tabla, col, definition):
+            if col not in cols(tabla):
+                cur.execute(f"ALTER TABLE {tabla} ADD COLUMN {col} {definition}")
+                print(f"  + migración: '{col}' agregado a {tabla}")
+
+        # ventas
+        add_col("ventas", "monto_efectivo", "DECIMAL(10,2) DEFAULT 0")
+        add_col("ventas", "monto_qr",       "DECIMAL(10,2) DEFAULT 0")
+        add_col("ventas", "tipo_pedido",    "TEXT DEFAULT 'mesa'")
+
+        # productos
+        add_col("productos", "disponible", "INTEGER NOT NULL DEFAULT 1")
+
+        # insumos (por si la tabla existía antes sin estas columnas)
+        add_col("insumos", "envase_tipo",     "TEXT")
+        add_col("insumos", "envase_cantidad", "REAL DEFAULT 1")
+        add_col("insumos", "descripcion",     "TEXT")
+
+        # movimientos_insumos (por si existía sin estas columnas)
+        add_col("movimientos_insumos", "venta_id",       "INTEGER")
+        add_col("movimientos_insumos", "stock_anterior", "REAL NOT NULL DEFAULT 0")
+        add_col("movimientos_insumos", "stock_nuevo",    "REAL NOT NULL DEFAULT 0")
+        add_col("movimientos_insumos", "usuario_id",     "INTEGER")
+
+        # Crear arqueos_caja si no existe (tabla nueva, la antigua era arqueo_caja)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS arqueos_caja (
+                id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                usuario_id           INTEGER NOT NULL,
+                fecha_inicio         TEXT    NOT NULL,
+                fecha_cierre         TEXT,
+                estado               TEXT    NOT NULL DEFAULT 'abierto'
+                                             CHECK(estado IN ('abierto','cerrado')),
+                monto_inicial        REAL    DEFAULT 0,
+                sistema_efectivo     REAL    DEFAULT 0,
+                sistema_qr           REAL    DEFAULT 0,
+                sistema_tarjeta      REAL    DEFAULT 0,
+                sistema_total        REAL    DEFAULT 0,
+                total_transacciones  INTEGER DEFAULT 0,
+                conteo_efectivo      REAL    DEFAULT 0,
+                conteo_qr            REAL    DEFAULT 0,
+                conteo_tarjeta       REAL    DEFAULT 0,
+                diferencia_efectivo  REAL    DEFAULT 0,
+                diferencia_qr        REAL    DEFAULT 0,
+                diferencia_tarjeta   REAL    DEFAULT 0,
+                diferencia_total     REAL    DEFAULT 0,
+                denominaciones       TEXT    DEFAULT '{}',
+                FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+            )
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_arqueos_usuario ON arqueos_caja(usuario_id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_arqueos_estado  ON arqueos_caja(estado)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_arqueos_fecha   ON arqueos_caja(fecha_inicio)")
+
+        self._connection.commit()
     def execute_query(self, query: str, params: tuple = None):
         """Execute INSERT/UPDATE/DELETE"""
         try:
@@ -147,16 +213,51 @@ class DatabaseManager:
             self._connection.close()
             self._connection = None
             print("✔ Conexión a base de datos cerrada")
-    
-    def backup_database(self, backup_path: str):
+    def _schedule_backup(self):
+        """Programa backup automático cada 24 horas."""
+        
+        def _do_backup():
+            backup_dir = Path.home() / '.restaurant_pos' / 'backups'
+            backup_dir.mkdir(exist_ok=True)
+
+            # Mantener solo los últimos 7 backups
+            backups = sorted(backup_dir.glob('*.db'))
+            while len(backups) >= 7:
+                backups[0].unlink()
+                backups.pop(0)
+
+            fecha = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_path = backup_dir / f"backup_{fecha}.db"
+
+            try:
+                # Backup seguro usando la API de SQLite (no shutil)
+                # Esto garantiza consistencia aunque haya escrituras en curso
+                conn_backup = sqlite3.connect(str(backup_path))
+                self._connection.backup(conn_backup)
+                conn_backup.close()
+                print(f"✔ Backup automático: {backup_path.name}")
+            except Exception as e:
+                print(f"✗ Error en backup automático: {e}")
+
+        t = threading.Thread(target=_do_backup, daemon=True)
+        t.start()
+        
+    def backup_database(self, backup_path: str = None) -> tuple:
+        """Backup manual — devuelve (True, path) o (False, error)."""
+        if not backup_path:
+            backup_dir = Path.home() / '.cafeteria_LaPlacita' / 'backups'
+            backup_dir.mkdir(exist_ok=True)
+            fecha = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_path = str(backup_dir / f"backup_manual_{fecha}.db")
         try:
-            import shutil
-            shutil.copy2(self.db_path, backup_path)
+            conn_backup = sqlite3.connect(backup_path)
+            self._connection.backup(conn_backup)
+            conn_backup.close()
             print(f"✔ Backup creado: {backup_path}")
-            return True
+            return True, backup_path
         except Exception as e:
             print(f"✗ Error al crear backup: {e}")
-            return False
+            return False, str(e)
     
     def get_table_count(self, table_name: str) -> int:
         query = f"SELECT COUNT(*) as count FROM {table_name}"

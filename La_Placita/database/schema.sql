@@ -134,3 +134,116 @@ CREATE INDEX IF NOT EXISTS idx_detalle_venta    ON detalle_ventas(venta_id);
 CREATE INDEX IF NOT EXISTS idx_detalle_producto ON detalle_ventas(producto_id);
 
 CREATE INDEX IF NOT EXISTS idx_gastos_fecha     ON gastos(fecha_gasto);
+-- ============================================================
+-- Tablas de inventario
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS insumos (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre          TEXT    NOT NULL UNIQUE,
+    unidad          TEXT    NOT NULL,
+    stock_actual    REAL    NOT NULL DEFAULT 0,
+    stock_minimo    REAL    NOT NULL DEFAULT 0,
+    costo_unitario  REAL    NOT NULL DEFAULT 0,
+    categoria       TEXT,
+    descripcion     TEXT,
+    activo          INTEGER NOT NULL DEFAULT 1,
+    envase_tipo     TEXT,
+    envase_cantidad REAL    DEFAULT 1,
+    fecha_creacion  TEXT    DEFAULT (datetime('now','localtime'))
+);
+
+CREATE TABLE IF NOT EXISTS recetas (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    producto_id INTEGER NOT NULL,
+    insumo_id   INTEGER NOT NULL,
+    cantidad    REAL    NOT NULL,
+    UNIQUE (producto_id, insumo_id),
+    FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE CASCADE,
+    FOREIGN KEY (insumo_id)   REFERENCES insumos(id)   ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS movimientos_insumos (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    insumo_id       INTEGER NOT NULL,
+    tipo            TEXT    NOT NULL CHECK(tipo IN ('entrada','consumo','ajuste','merma')),
+    cantidad        REAL    NOT NULL,
+    stock_anterior  REAL    NOT NULL DEFAULT 0,
+    stock_nuevo     REAL    NOT NULL DEFAULT 0,
+    motivo          TEXT,
+    venta_id        INTEGER,
+    usuario_id      INTEGER,
+    fecha           TEXT    DEFAULT (datetime('now','localtime')),
+    FOREIGN KEY (insumo_id)   REFERENCES insumos(id),
+    FOREIGN KEY (usuario_id)  REFERENCES usuarios(id)
+);
+
+CREATE TABLE IF NOT EXISTS paquetes_insumos (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre          TEXT NOT NULL,
+    proveedor       TEXT,
+    nota            TEXT,
+    items_json      TEXT DEFAULT '[]',
+    ajustes_json    TEXT DEFAULT '[]',
+    costo_total     DECIMAL(10,2) DEFAULT 0,
+    usuario_id      INTEGER,
+    fecha_registro  TEXT NOT NULL,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+);
+
+-- ============================================================
+-- Arqueo de caja
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS arqueo_caja (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    usuario_id      INTEGER NOT NULL,
+    fecha_inicio    TEXT    NOT NULL,
+    fecha_cierre    TEXT,
+    monto_inicial   REAL    NOT NULL DEFAULT 0,
+    monto_final     REAL,
+    estado          TEXT    NOT NULL DEFAULT 'abierto'
+                            CHECK(estado IN ('abierto','cerrado')),
+    observaciones   TEXT,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+);
+
+-- Alias con el nombre que usa el modelo ArqueoCaja
+CREATE TABLE IF NOT EXISTS arqueos_caja (
+    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    usuario_id           INTEGER NOT NULL,
+    fecha_inicio         TEXT    NOT NULL,
+    fecha_cierre         TEXT,
+    estado               TEXT    NOT NULL DEFAULT 'abierto'
+                                 CHECK(estado IN ('abierto','cerrado')),
+    monto_inicial        REAL    DEFAULT 0,
+    sistema_efectivo     REAL    DEFAULT 0,
+    sistema_qr           REAL    DEFAULT 0,
+    sistema_tarjeta      REAL    DEFAULT 0,
+    sistema_total        REAL    DEFAULT 0,
+    total_transacciones  INTEGER DEFAULT 0,
+    conteo_efectivo      REAL    DEFAULT 0,
+    conteo_qr            REAL    DEFAULT 0,
+    conteo_tarjeta       REAL    DEFAULT 0,
+    diferencia_efectivo  REAL    DEFAULT 0,
+    diferencia_qr        REAL    DEFAULT 0,
+    diferencia_tarjeta   REAL    DEFAULT 0,
+    diferencia_total     REAL    DEFAULT 0,
+    denominaciones       TEXT    DEFAULT '{}',
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_arqueos_usuario ON arqueos_caja(usuario_id);
+CREATE INDEX IF NOT EXISTS idx_arqueos_estado  ON arqueos_caja(estado);
+CREATE INDEX IF NOT EXISTS idx_arqueos_fecha   ON arqueos_caja(fecha_inicio);
+
+-- ============================================================
+-- Índices de inventario
+-- ============================================================
+
+CREATE INDEX IF NOT EXISTS idx_recetas_producto  ON recetas(producto_id);
+CREATE INDEX IF NOT EXISTS idx_recetas_insumo    ON recetas(insumo_id);
+CREATE INDEX IF NOT EXISTS idx_movinsumos_insumo ON movimientos_insumos(insumo_id);
+CREATE INDEX IF NOT EXISTS idx_movinsumos_fecha  ON movimientos_insumos(fecha);
+CREATE INDEX IF NOT EXISTS idx_movinsumos_venta  ON movimientos_insumos(venta_id);
+CREATE INDEX IF NOT EXISTS idx_insumos_activo    ON insumos(activo);
