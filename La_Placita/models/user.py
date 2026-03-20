@@ -217,22 +217,49 @@ current_user: Optional[User] = None
 
 def login(email: str, password: str) -> Optional[User]:
     """Iniciar sesión"""
-    global current_user
     user = User.authenticate(email, password)
     if user:
-        current_user = user
+        set_current_user(user)
     return user
 
 
 def logout():
     """Cerrar sesión"""
-    global current_user
-    current_user = None
+    set_current_user(None)
 
 
 def get_current_user() -> Optional[User]:
-    """Obtener usuario actualmente autenticado"""
-    return current_user
+    """
+    Obtener usuario autenticado.
+    Primero intenta la variable global; si es None (problema PyInstaller),
+    busca en QApplication.instance() como respaldo.
+    """
+    global current_user
+    if current_user:
+        return current_user
+    # Fallback: buscar en QApplication (funciona en ejecutable compilado)
+    try:
+        from PySide6.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app and hasattr(app, "_current_user"):
+            current_user = app._current_user  # sincronizar variable global
+            return current_user
+    except Exception:
+        pass
+    return None
+
+
+def set_current_user(user) -> None:
+    """Guarda el usuario en la variable global Y en QApplication."""
+    global current_user
+    current_user = user
+    try:
+        from PySide6.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app:
+            app._current_user = user
+    except Exception:
+        pass
 
 
 if __name__ == '__main__':

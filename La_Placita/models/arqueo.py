@@ -78,27 +78,39 @@ class ArqueoCaja:
     # ── WRITE ─────────────────────────────────────────────────────────
 
     @staticmethod
-    def abrir(monto_inicial: float = 0) -> Optional['ArqueoCaja']:
+    def abrir(monto_inicial: float = 0, usuario_id: int = None) -> Optional['ArqueoCaja']:
         """
-        Abre un nuevo arqueo para el usuario actual.
-        Solo se permite uno abierto por usuario a la vez.
+        Abre un nuevo arqueo para el usuario.
+        usuario_id: pasar explícitamente para evitar problemas con
+                    la variable global en el ejecutable compilado.
+        Solo se permite un arqueo abierto por usuario a la vez.
         """
-        usuario = get_current_user()
-        if not usuario:
-            return None
-
+        # Preferir usuario_id explícito; fallback a get_current_user()
+        uid = usuario_id
+        if not uid:
+            usuario = get_current_user()
+            if not usuario:
+                print("✗ ArqueoCaja.abrir: no hay usuario autenticado")
+                return None
+            uid = usuario.id
+ 
         # Verificar que no tenga ya uno abierto
-        existente = ArqueoCaja.get_abierto_por_usuario(usuario.id)
+        existente = ArqueoCaja.get_abierto_por_usuario(uid)
         if existente:
             return existente  # Retorna el existente sin crear uno nuevo
-
+ 
         now = datetime.now().isoformat()
-        arqueo_id = db.execute_query(
-            """INSERT INTO arqueos_caja (usuario_id, fecha_inicio, estado, monto_inicial)
-               VALUES (?, ?, 'abierto', ?)""",
-            (usuario.id, now, monto_inicial)
-        )
-        return ArqueoCaja.get_by_id(arqueo_id)
+        try:
+            arqueo_id = db.execute_query(
+                """INSERT INTO arqueos_caja (usuario_id, fecha_inicio, estado, monto_inicial)
+                   VALUES (?, ?, 'abierto', ?)""",
+                (uid, now, monto_inicial)
+            )
+            print(f"✓ Caja abierta: arqueo_id={arqueo_id}, usuario_id={uid}")
+            return ArqueoCaja.get_by_id(arqueo_id)
+        except Exception as e:
+            print(f"✗ Error abriendo caja: {e}")
+            return None
 
     @staticmethod
     def calcular_ventas_sistema(usuario_id: int, fecha_inicio: str) -> dict:

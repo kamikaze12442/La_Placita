@@ -117,10 +117,10 @@ class Sale:
                 db.execute_query(
                     detail_query,
                     (sale_id, item.producto_id, item.cantidad,
-                     item.precio_unitario, item.subtotal)
+                    item.precio_unitario, item.subtotal)
                 )
 
-                # Leer stock actual y flag disponible
+                # Stock del producto
                 row = db.fetch_one(
                     "SELECT stock, nombre, COALESCE(disponible, 1) as disponible "
                     "FROM productos WHERE id = ?",
@@ -131,23 +131,62 @@ class Sale:
 
                 stock_actual = row["stock"]
                 nombre       = row["nombre"]
-                disponible   = row["disponible"]  # 1=controla stock, 0=vende sin stock
+                disponible   = row["disponible"]
 
                 if disponible:
-                    # Stock no puede quedar negativo
                     nuevo_stock = max(stock_actual - item.cantidad, 0)
                     db.execute_query(
                         "UPDATE productos SET stock = ? WHERE id = ?",
                         (nuevo_stock, item.producto_id)
                     )
-                    # Alerta si llega a cero
                     if nuevo_stock == 0:
                         alertas.append(nombre)
-                # Si disponible=0: vender sin tocar el stock
 
-            print(f"✓ Venta: {numero_factura} - Total: Bs {total:.2f}")
+                # ── Descontar insumos según receta ────────────────────────
+                receta = db.fetch_all(
+                    "SELECT insumo_id, cantidad FROM recetas WHERE producto_id = ?",
+                    (item.producto_id,)
+                )
+                for ri in receta:
+                    insumo_id      = ri["insumo_id"]
+                    cant_por_venta = ri["cantidad"] * item.cantidad
+
+                    insumo = db.fetch_one(
+                        "SELECT stock_actual, nombre, stock_minimo FROM insumos WHERE id = ?",
+                        (insumo_id,)
+                    )
+                    if not insumo:
+                        continue
+
+                    nuevo_stock_ins = max(insumo["stock_actual"] - cant_por_venta, 0)
+
+                    db.execute_query(
+                        "UPDATE insumos SET stock_actual = ? WHERE id = ?",
+                        (nuevo_stock_ins, insumo_id)
+                    )
+
+                    db.execute_query(
+                        """INSERT INTO movimientos_insumos
+                        (insumo_id, tipo, cantidad, stock_anterior, stock_nuevo,
+                            motivo, usuario_id, fecha)
+                        VALUES (?, 'consumo', ?, ?, ?, ?, ?, ?)""",
+                        (
+                            insumo_id,
+                            float(-cant_por_venta),
+                            float(insumo["stock_actual"]),
+                            float(nuevo_stock_ins),
+                            f"Venta: {numero_factura} — {nombre}",
+                            usuario_id,
+                            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        )
+                    )
+
+                    if nuevo_stock_ins <= 0:
+                        alertas.append(f"{insumo['nombre']} (agotado)")
+                    elif nuevo_stock_ins <= insumo["stock_minimo"]:
+                        alertas.append(f"{insumo['nombre']} (stock bajo)")
+                print(f"✓ Venta: {numero_factura} - Total: Bs {total:.2f}")
             return sale_id, alertas
-
         except Exception as e:
             print(f"✗ Error creating sale: {e}")
             import traceback; traceback.print_exc()
