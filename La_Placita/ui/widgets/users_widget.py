@@ -43,8 +43,8 @@ class UserDialog(QDialog):
         form_layout.addRow("Nombre:*", self.name_input)
 
         self.email_input = QLineEdit()
-        self.email_input.setPlaceholderText("correo@ejemplo.com")
-        form_layout.addRow("Email:*", self.email_input)
+        self.email_input.setPlaceholderText("usuario123")
+        form_layout.addRow("Usuario:*", self.email_input)
 
         self.role_combo = QComboBox()
         self.role_combo.addItem("👨‍💼 Administrador", "admin")
@@ -146,8 +146,8 @@ class UserDialog(QDialog):
             self.name_input.setFocus()
             return False
 
-        if not data['email'] or '@' not in data['email']:
-            QMessageBox.warning(self, "Error", "Ingrese un email válido.")
+        if not data['email']:
+            QMessageBox.warning(self, "Error", "Ingrese un nombre válido.")
             self.email_input.setFocus()
             return False
 

@@ -478,10 +478,50 @@ class CerrarCajaDialog(QDialog):
 # TAB 1: Caja Actual  — sin duplicación, sin mixto
 # ──────────────────────────────────────────────────────────────────────────────
 
+
+def _get_usuario_actual():
+    """
+    Obtiene el usuario actual con múltiples fallbacks.
+    Robusto frente al problema de variable global en ejecutables PyInstaller.
+    """
+    # Intento 1: variable global normal
+    from models.user import get_current_user
+    u = get_current_user()
+    if u:
+        return u
+
+    # Intento 2: reimportar el módulo para forzar la variable global
+    import importlib, sys
+    try:
+        if "models.user" in sys.modules:
+            mod = sys.modules["models.user"]
+            u = getattr(mod, "current_user", None)
+            if u:
+                return u
+    except Exception:
+        pass
+
+    return None
+
 class CajaActualTab(QWidget):
     def __init__(self):
         super().__init__()
         self._arqueo_actual = None
+        # Guardar usuario en init, cuando la sesion esta garantizada
+        from models.user import get_current_user
+        u = get_current_user()
+        self._usuario_id = u.id if u else None
+        self._usuario_nombre = u.nombre if u else "Usuario"
+        if not self._usuario_id:
+            # Fallback: buscar en QApplication
+            try:
+                from PySide6.QtWidgets import QApplication
+                app = QApplication.instance()
+                if app and hasattr(app, "_current_user") and app._current_user:
+                    self._usuario_id = app._current_user.id
+                    self._usuario_nombre = app._current_user.nombre
+            except Exception:
+                pass
 
         # Layout fijo — nunca se destruye
         root = QVBoxLayout(self)
@@ -611,8 +651,28 @@ class CajaActualTab(QWidget):
 
     # ── Refresh — solo actualiza valores, no recrea widgets ───────────
     def refresh(self):
-        usuario = get_current_user()
-        arqueo  = ArqueoCaja.get_abierto_por_usuario(usuario.id)
+        uid = self._usuario_id
+        if not uid:
+            # Ultimo intento de recuperar el usuario
+            from models.user import get_current_user
+            u = get_current_user()
+            if u:
+                self._usuario_id = u.id
+                uid = u.id
+            else:
+                try:
+                    from PySide6.QtWidgets import QApplication
+                    app = QApplication.instance()
+                    if app and hasattr(app, "_current_user") and app._current_user:
+                        self._usuario_id = app._current_user.id
+                        uid = self._usuario_id
+                except Exception:
+                    pass
+        if not uid:
+            self._page_cerrada.setVisible(True)
+            self._page_abierta.setVisible(False)
+            return
+        arqueo  = ArqueoCaja.get_abierto_por_usuario(uid)
         self._arqueo_actual = arqueo
 
         if arqueo:
@@ -634,9 +694,19 @@ class CajaActualTab(QWidget):
 
     def _abrir_caja(self):
         dialog = AbrirCajaDialog(self)
-        if dialog.exec():
-            ArqueoCaja.abrir(dialog.get_monto())
-            self.refresh()
+        if not dialog.exec():
+            return
+        uid = self._usuario_id
+        if not uid:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.critical(self, "Error de sesion",
+                "No se pudo identificar al usuario.\n"
+                "Cierra la aplicacion y vuelve a abrir.")
+            return
+        # Intentar abrir — si ya hay una abierta, devuelve la existente
+        ArqueoCaja.abrir(monto_inicial=dialog.get_monto(), usuario_id=uid)
+        # Siempre refrescar, haya o no error
+        self.refresh()
 
     def _cerrar_caja(self):
         if not self._arqueo_actual:

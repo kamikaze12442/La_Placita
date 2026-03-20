@@ -916,6 +916,7 @@ class FinanceWidget(QWidget):
         self.analysis_table.setColumnWidth(2, 150)
         self.analysis_table.setColumnWidth(3, 190)
         self.analysis_table.setColumnWidth(4, 130)
+        self.analysis_table.setMinimumHeight(800)
 
         al.addWidget(self.analysis_table)
         layout.addWidget(frame)
@@ -980,16 +981,129 @@ class FinanceWidget(QWidget):
         self.update_analysis_table()
 
     # ── Tabla de análisis ─────────────────────────────────────────────
-
+    def _set_category_row(self, row, label):
+        label_item = QTableWidgetItem(label)
+        label_item.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
+        label_item.setForeground(QColor("#1F2937"))
+        label_item.setBackground(QColor("#F3F4F6"))
+        self.analysis_table.setItem(row, 0, label_item)
+        for col in range(1, 5):
+            empty_item = QTableWidgetItem("")
+            empty_item.setBackground(QColor("#F3F4F6"))
+            self.analysis_table.setItem(row, col, empty_item)
+        self.analysis_table.setRowHeight(row, 45)
+    def _set_table_row(self, row, label, ingresos, gastos, ganancia, margen, unidades, is_summary=False):
+        """Set table row data with optional units sold"""
+        # Column 0: Label (Mes/Producto) with units
+        if unidades is not None:
+            label_text = f"{label}  ({unidades} unidades)"
+        else:
+            label_text = label
+        
+        label_item = QTableWidgetItem(label_text)
+        
+        if is_summary:
+            # Summary row (header row for month)
+            font = QFont("Segoe UI", 16, QFont.Weight.Bold)
+            label_item.setFont(font)
+            label_item.setBackground(QColor("#F9FAFB"))
+            label_item.setForeground(QColor("#1F2937"))
+        else:
+            # Product rows
+            if "📁" in label:
+                # Category header
+                font = QFont("Segoe UI", 13, QFont.Weight.Bold)
+                label_item.setFont(font)
+                label_item.setForeground(QColor("#1F2937"))
+                label_item.setBackground(QColor("#F3F4F6"))
+            else:
+                # Regular product
+                font = QFont("Segoe UI", 13)
+                label_item.setFont(font)
+                label_item.setForeground(QColor("#4B5563"))
+        
+        self.analysis_table.setItem(row, 0, label_item)
+        
+        # Column 1: Ingresos
+        ing_item = QTableWidgetItem(f"Bs {ingresos:,.2f}")
+        ing_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        ing_item.setForeground(QColor("#10B981"))
+        
+        if is_summary:
+            ing_item.setFont(QFont("Segoe UI", 15, QFont.Weight.Bold))
+            ing_item.setBackground(QColor("#ECFDF5"))
+        elif "📁" in label:
+            ing_item.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
+            ing_item.setBackground(QColor("#F3F4F6"))
+        else:
+            ing_item.setFont(QFont("Segoe UI", 12))
+        
+        self.analysis_table.setItem(row, 1, ing_item)
+        
+        # Column 2: Gastos
+        gas_item = QTableWidgetItem(f"Bs {gastos:,.2f}")
+        gas_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        gas_item.setForeground(QColor("#EF4444"))
+        
+        if is_summary:
+            gas_item.setFont(QFont("Segoe UI", 15, QFont.Weight.Bold))
+            gas_item.setBackground(QColor("#FEE2E2"))
+        elif "📁" in label:
+            gas_item.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
+            gas_item.setBackground(QColor("#F3F4F6"))
+        else:
+            gas_item.setFont(QFont("Segoe UI", 12))
+        
+        self.analysis_table.setItem(row, 2, gas_item)
+        
+        # Column 3: Ganancia Neta
+        gan_item = QTableWidgetItem(f"Bs {ganancia:,.2f}")
+        gan_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        gan_item.setForeground(QColor("#10B981" if ganancia >= 0 else "#EF4444"))
+        
+        if is_summary:
+            gan_item.setFont(QFont("Segoe UI", 15, QFont.Weight.Bold))
+            color_bg = "#ECFDF5" if ganancia >= 0 else "#FEE2E2"
+            gan_item.setBackground(QColor(color_bg))
+        elif "📁" in label:
+            gan_item.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
+            gan_item.setBackground(QColor("#F3F4F6"))
+        else:
+            gan_item.setFont(QFont("Segoe UI", 12))
+        
+        self.analysis_table.setItem(row, 3, gan_item)
+        
+        # Column 4: Margen
+        mar_item = QTableWidgetItem(f"{margen:.1f}%")
+        mar_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        mar_item.setForeground(QColor("#10B981" if margen >= 0 else "#EF4444"))
+        
+        if is_summary:
+            mar_item.setFont(QFont("Segoe UI", 15, QFont.Weight.Bold))
+            color_bg = "#ECFDF5" if margen >= 0 else "#FEE2E2"
+            mar_item.setBackground(QColor(color_bg))
+        elif "📁" in label:
+            mar_item.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
+            mar_item.setBackground(QColor("#F3F4F6"))
+        else:
+            mar_item.setFont(QFont("Segoe UI", 12))
+        
+        self.analysis_table.setItem(row, 4, mar_item)
+        
+        # Set row height
+        if is_summary:
+            self.analysis_table.setRowHeight(row, 75)
+        elif "📁" in label:
+            self.analysis_table.setRowHeight(row, 55)
+        else:
+            self.analysis_table.setRowHeight(row, 48)
     def update_analysis_table(self):
-        month_str   = f"{self.current_year}-{self.current_month:02d}"
+        month_str = f"{self.current_year}-{self.current_month:02d}"
         selected_day = self.day_combo.currentData()
 
-        # Filtro dinámico según día seleccionado
         if selected_day and selected_day > 0:
-            day_str     = f"{self.current_year}-{self.current_month:02d}-{selected_day:02d}"
-            date_filter = f"strftime('%Y-%m-%d', fecha_venta)='{day_str}'"
-            date_filter_v = f"strftime('%Y-%m-%d', v.fecha_venta)='{day_str}'"
+            date_filter_v = f"strftime('%Y-%m-%d', v.fecha_venta)='{self.current_year}-{self.current_month:02d}-{selected_day:02d}'"
+            date_filter   = f"strftime('%Y-%m-%d', fecha_venta)='{self.current_year}-{self.current_month:02d}-{selected_day:02d}'"
             label_periodo = f"📅 {selected_day:02d}/{self.current_month:02d}/{self.current_year}"
         else:
             date_filter   = f"strftime('%Y-%m', fecha_venta)='{month_str}'"
@@ -1014,13 +1128,6 @@ class FinanceWidget(QWidget):
         margen_mes   = (ganancia_mes / ingresos_mes * 100) if ingresos_mes > 0 else 0.0
 
         selected_cat = self.category_combo.currentData()
-        selected_day = self.day_combo.currentData()   # 0 = todos
-
-        # Base del WHERE según si hay filtro de día o solo de mes
-        if selected_day and selected_day > 0:
-            date_filter = f"strftime('%Y-%m-%d', v.fecha_venta) = '{self.current_year}-{self.current_month:02d}-{selected_day:02d}'"
-        else:
-            date_filter = f"strftime('%Y-%m', v.fecha_venta) = '{self.current_year}-{self.current_month:02d}'"
 
         query = (
             "SELECT c.nombre as categoria, p.nombre as producto, "
@@ -1032,104 +1139,99 @@ class FinanceWidget(QWidget):
             "JOIN productos p  ON dv.producto_id=p.id "
             "JOIN categorias c ON p.categoria_id=c.id "
             "JOIN ventas v     ON dv.venta_id=v.id "
-            f"WHERE {date_filter} AND v.estado='completada'"
+            f"WHERE {date_filter_v} AND v.estado='completada'"
         )
         params = []
         if selected_cat is not None:
             query += " AND c.id=?"
             params.append(selected_cat)
-        query += " GROUP BY p.id ORDER BY c.nombre, ingresos DESC"
+        query += " GROUP BY c.nombre, p.nombre, p.costo ORDER BY c.nombre, ingresos DESC"
 
-        product_results = db.fetch_all(query, tuple(params))
+        products = db.fetch_all(query, tuple(params))
 
-        self.analysis_table.setRowCount(0)
-        row = 0
+        # ── Construir filas con totales por categoría ──────────────────
+        rows_to_add = []
+        current_category = None
+        cat_ing = cat_gas = 0.0
+        cat_products = []
 
-        self._add_table_row(
-            row,
-            label_periodo,
-            ingresos_mes, gastos_mes, ganancia_mes, margen_mes,
-            is_summary=True
-        )
-        row += 1
+        for product in products:
+            categoria = product['categoria']
 
-        if product_results:
-            current_cat = None
-            cat_ing = cat_gas = 0.0
-
-            for p in product_results:
-                cat = p['categoria']
-                if cat != current_cat:
-                    if current_cat is not None:
-                        cg = cat_ing - cat_gas
-                        cm = (cg / cat_ing * 100) if cat_ing > 0 else 0.0
-                        self._add_table_row(
-                            row, f"📁 {current_cat}", cat_ing, cat_gas, cg, cm)
-                        row += 1
-
-                    current_cat = cat
+            if categoria != current_category:
+                # Cerrar categoría anterior
+                if current_category is not None:
+                    cat_gan = cat_ing - cat_gas
+                    cat_mar = (cat_gan / cat_ing * 100) if cat_ing > 0 else 0.0
+                    rows_to_add.append({
+                        'type':     'category',
+                        'label':    f"📁 {current_category}",
+                        'ingresos': cat_ing,
+                        'gastos':   cat_gas,
+                        'ganancia': cat_gan,
+                        'margen':   cat_mar,
+                    })
+                    rows_to_add.extend(cat_products)
+                    cat_products = []
                     cat_ing = cat_gas = 0.0
 
-                    self.analysis_table.insertRow(row)
-                    ch = QTableWidgetItem(f"  📂 {cat}")
-                    ch.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
-                    ch.setBackground(QColor("#F3F4F6"))
-                    self.analysis_table.setItem(row, 0, ch)
-                    for col in range(1, 5):
-                        e = QTableWidgetItem("")
-                        e.setBackground(QColor("#F3F4F6"))
-                        self.analysis_table.setItem(row, col, e)
-                    self.analysis_table.setRowHeight(row, 40)
-                    row += 1
+                current_category = categoria
 
-                ing = float(p['ingresos'] or 0)
-                gas = float(p['gastos']   or 0)
-                gan = ing - gas
-                mar = (gan / ing * 100) if ing > 0 else 0.0
-                self._add_table_row(
-                    row, f"    {p['producto']}", ing, gas, gan, mar)
-                row += 1
-                cat_ing += ing
-                cat_gas += gas
+            ingresos_prod = float(product['ingresos'] or 0)
+            gastos_prod   = float(product['gastos']   or 0)
+            ganancia_prod = ingresos_prod - gastos_prod
+            margen_prod   = (ganancia_prod / ingresos_prod * 100) if ingresos_prod > 0 else 0.0
 
-            if current_cat:
-                cg = cat_ing - cat_gas
-                cm = (cg / cat_ing * 100) if cat_ing > 0 else 0.0
-                self._add_table_row(
-                    row, f"📁 {current_cat}", cat_ing, cat_gas, cg, cm)
+            cat_ing += ingresos_prod
+            cat_gas += gastos_prod
 
-    def _add_table_row(self, row, label, ingresos, gastos, ganancia, margen,
-                       is_summary=False):
-        self.analysis_table.insertRow(row)
-        is_cat = "📁" in label
-        sz     = 15 if is_summary else (13 if is_cat else 12)
-        bg_def = "#FFF7ED" if is_summary else ("#F3F4F6" if is_cat else None)
-        bg_gan = (("#ECFDF5" if ganancia >= 0 else "#FEE2E2")
-                  if is_summary else bg_def)
-        bold   = is_summary or is_cat
-        green  = "#10B981"
-        red    = "#EF4444"
+            cat_products.append({
+                'type':     'product',
+                'label':    f"  └─ {product['producto']}",
+                'ingresos': ingresos_prod,
+                'gastos':   gastos_prod,
+                'ganancia': ganancia_prod,
+                'margen':   margen_prod,
+                'unidades': int(product['unidades_vendidas']),
+            })
 
-        def cell(text, align=Qt.AlignmentFlag.AlignLeft, color=None, bg=None):
-            it = QTableWidgetItem(text)
-            it.setTextAlignment(align | Qt.AlignmentFlag.AlignVCenter)
-            it.setFont(QFont("Segoe UI", sz,
-                             QFont.Weight.Bold if bold else QFont.Weight.Normal))
-            if color: it.setForeground(QColor(color))
-            if bg:    it.setBackground(QColor(bg))
-            return it
+        # Cerrar última categoría
+        if current_category is not None:
+            cat_gan = cat_ing - cat_gas
+            cat_mar = (cat_gan / cat_ing * 100) if cat_ing > 0 else 0.0
+            rows_to_add.append({
+                'type':     'category',
+                'label':    f"📁 {current_category}",
+                'ingresos': cat_ing,
+                'gastos':   cat_gas,
+                'ganancia': cat_gan,
+                'margen':   cat_mar,
+            })
+            rows_to_add.extend(cat_products)
 
-        R = Qt.AlignmentFlag.AlignRight
-        self.analysis_table.setItem(row, 0, cell(label,                 bg=bg_def))
-        self.analysis_table.setItem(row, 1, cell(f"Bs {ingresos:.2f}", R, green, bg_def))
-        self.analysis_table.setItem(row, 2, cell(f"Bs {gastos:.2f}",   R, red,   bg_def))
-        self.analysis_table.setItem(row, 3, cell(f"Bs {ganancia:.2f}", R,
-            green if ganancia >= 0 else red, bg_gan))
-        self.analysis_table.setItem(row, 4, cell(f"{margen:.1f}%",     R,
-            green if margen >= 0 else red, bg_gan))
-        self.analysis_table.setRowHeight(
-            row, 75 if is_summary else (55 if is_cat else 48))
+        # ── Renderizar tabla ───────────────────────────────────────────
+        self.analysis_table.setRowCount(1 + len(rows_to_add))
 
+        # Fila 0: resumen del mes
+        self._set_table_row(0, label_periodo, ingresos_mes, gastos_mes,
+                            ganancia_mes, margen_mes, unidades=None, is_summary=True)
+
+        # Resto de filas
+        for i, row_data in enumerate(rows_to_add, 1):
+            if row_data['type'] == 'category':
+                self._set_table_row(
+                    i, row_data['label'],
+                    row_data['ingresos'], row_data['gastos'],
+                    row_data['ganancia'], row_data['margen'],
+                    unidades=None, is_summary=False
+                )
+            else:
+                self._set_table_row(
+                    i, row_data['label'],
+                    row_data['ingresos'], row_data['gastos'],
+                    row_data['ganancia'], row_data['margen'],
+                    unidades=row_data['unidades'], is_summary=False
+                )
     # ── Callbacks ─────────────────────────────────────────────────────
 
     def on_month_changed(self):
@@ -1160,41 +1262,438 @@ class FinanceWidget(QWidget):
     def export_excel(self):
         try:
             from openpyxl import Workbook
-            from openpyxl.styles import Font, PatternFill, Alignment
+            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side, numbers
+            from openpyxl.utils import get_column_letter
 
             wb = Workbook()
             ws = wb.active
-            ws.title = f"Finanzas {self.month_combo.currentText()}"
+            ws.title = f"{MESES_ES[self.current_month-1]} {self.current_year}"
 
-            headers = ["Mes/Producto", "Ingresos (Bs)", "Gastos (Bs)",
-                       "Ganancia Neta (Bs)", "Margen (%)"]
+            # ── Colores ───────────────────────────────────────────────
+            COLOR_HEADER   = "FF6B35"
+            COLOR_SUMMARY  = "FFF7ED"
+            COLOR_CAT      = "F3F4F6"
+            COLOR_GREEN    = "10B981"
+            COLOR_RED      = "EF4444"
+            COLOR_GRAY     = "6B7280"
+            COLOR_WHITE    = "FFFFFF"
+
+            thin = Side(style="thin", color="E5E7EB")
+            border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+            def header_cell(ws, row, col, value):
+                c = ws.cell(row, col, value)
+                c.font      = Font(bold=True, color=COLOR_WHITE, size=11)
+                c.fill      = PatternFill(start_color=COLOR_HEADER,
+                                        end_color=COLOR_HEADER, fill_type="solid")
+                c.alignment = Alignment(horizontal="center", vertical="center",
+                                        wrap_text=True)
+                c.border    = border
+                return c
+
+            def data_cell(ws, row, col, value, bold=False, color=None,
+                        bg=None, align="right", num_format=None):
+                c = ws.cell(row, col, value)
+                c.font      = Font(bold=bold, color=color or "1F2937", size=10)
+                c.alignment = Alignment(horizontal=align, vertical="center")
+                c.border    = border
+                if bg:
+                    c.fill = PatternFill(start_color=bg, end_color=bg,
+                                        fill_type="solid")
+                if num_format:
+                    c.number_format = num_format
+                return c
+
+            # ── Título del reporte ─────────────────────────────────────
+            ws.merge_cells("A1:E1")
+            title_cell = ws["A1"]
+            title_cell.value     = f"Reporte Financiero — {MESES_ES[self.current_month-1]} {self.current_year}"
+            title_cell.font      = Font(bold=True, size=14, color=COLOR_HEADER)
+            title_cell.alignment = Alignment(horizontal="center", vertical="center")
+            title_cell.fill      = PatternFill(start_color="FFF7ED",
+                                            end_color="FFF7ED", fill_type="solid")
+            ws.row_dimensions[1].height = 30
+
+            ws.merge_cells("A2:E2")
+            gen_cell = ws["A2"]
+            gen_cell.value     = f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+            gen_cell.font      = Font(size=9, color=COLOR_GRAY, italic=True)
+            gen_cell.alignment = Alignment(horizontal="right")
+
+            # ── Encabezados ────────────────────────────────────────────
+            headers = ["Producto / Categoría", "Ingresos (Bs)",
+                    "Gastos (Bs)", "Ganancia Neta (Bs)", "Margen (%)"]
             for col, h in enumerate(headers, 1):
-                cell = ws.cell(1, col, h)
-                cell.font      = Font(bold=True, color="FFFFFF")
-                cell.fill      = PatternFill(
-                    start_color="FF6B35", end_color="FF6B35", fill_type="solid")
-                cell.alignment = Alignment(
-                    horizontal="center", vertical="center")
+                header_cell(ws, 3, col, h)
+            ws.row_dimensions[3].height = 32
 
+            # ── Datos desde la tabla ───────────────────────────────────
+            excel_row = 4
             for row in range(self.analysis_table.rowCount()):
-                for col in range(5):
+                label_item = self.analysis_table.item(row, 0)
+                if not label_item:
+                    continue
+
+                label = label_item.text()
+                is_summary = row == 0
+                is_cat     = "📁" in label
+
+                # Leer valores numéricos limpiando "Bs " y "%"
+                def get_val(col):
                     item = self.analysis_table.item(row, col)
-                    if item:
-                        ws.cell(row + 2, col + 1, item.text())
+                    if not item or not item.text():
+                        return None
+                    txt = item.text().replace("Bs ", "").replace(",", "").replace("%", "").strip()
+                    try:
+                        return float(txt)
+                    except ValueError:
+                        return None
 
-            for col in ws.columns:
-                ml = max(
-                    (len(str(c.value)) for c in col if c.value), default=0)
-                ws.column_dimensions[col[0].column_letter].width = ml + 2
+                ing = get_val(1)
+                gas = get_val(2)
+                gan = get_val(3)
+                mar = get_val(4)
 
-            filename = (f"finanzas_{self.current_year}"
-                        f"_{self.current_month:02d}.xlsx")
+                bg = ("FFF7ED" if is_summary else
+                    "F3F4F6" if is_cat else COLOR_WHITE)
+
+                # Col A — Label
+                c = data_cell(ws, excel_row, 1, label,
+                            bold=is_summary or is_cat,
+                            color="1F2937", bg=bg, align="left")
+                if is_summary:
+                    c.font = Font(bold=True, size=12, color=COLOR_HEADER)
+
+                # Cols B-E — Números
+                if ing is not None:
+                    num_fmt = '#,##0.00'
+                    ing_col = COLOR_GREEN if not is_cat else "1F2937"
+                    gas_col = COLOR_RED   if not is_cat else "1F2937"
+                    gan_col = COLOR_GREEN if (gan or 0) >= 0 else COLOR_RED
+                    mar_col = COLOR_GREEN if (mar or 0) >= 0 else COLOR_RED
+
+                    data_cell(ws, excel_row, 2, ing, bold=is_summary or is_cat,
+                            color=ing_col, bg=bg, num_format=num_fmt)
+                    data_cell(ws, excel_row, 3, gas, bold=is_summary or is_cat,
+                            color=gas_col, bg=bg, num_format=num_fmt)
+                    data_cell(ws, excel_row, 4, gan, bold=is_summary or is_cat,
+                            color=gan_col, bg=bg, num_format=num_fmt)
+                    pct_cell = data_cell(ws, excel_row, 5, (mar or 0) / 100,
+                                        bold=is_summary or is_cat,
+                                        color=mar_col, bg=bg,
+                                        num_format='0.0%')
+                else:
+                    for col in range(2, 6):
+                        data_cell(ws, excel_row, col, "", bg=bg)
+
+                ws.row_dimensions[excel_row].height = (
+                    24 if is_summary else 20 if is_cat else 18)
+                excel_row += 1
+
+            # ── Sección resumen de costos ──────────────────────────────
+            excel_row += 1
+            ws.merge_cells(f"A{excel_row}:E{excel_row}")
+            sec = ws.cell(excel_row, 1, "💼 Resumen de Costos del Período")
+            sec.font      = Font(bold=True, size=11, color=COLOR_WHITE)
+            sec.fill      = PatternFill(start_color="8B5CF6",
+                                        end_color="8B5CF6", fill_type="solid")
+            sec.alignment = Alignment(horizontal="center", vertical="center")
+            ws.row_dimensions[excel_row].height = 24
+            excel_row += 1
+
+            costo_fijo, costo_variable = self.costos_card.get_totals()
+            costos_rows = [
+                ("Costos Fijos",    costo_fijo,    "3B82F6"),
+                ("Costos Variables", costo_variable, "F59E0B"),
+                ("Total Costos",    costo_fijo + costo_variable, "EF4444"),
+            ]
+            for nombre, valor, color in costos_rows:
+                data_cell(ws, excel_row, 1, nombre, bold=nombre.startswith("Total"),
+                        color="1F2937", align="left")
+                data_cell(ws, excel_row, 2, valor,
+                        bold=nombre.startswith("Total"),
+                        color=color, num_format='#,##0.00')
+                for col in range(3, 6):
+                    data_cell(ws, excel_row, col, "")
+                ws.row_dimensions[excel_row].height = 18
+                excel_row += 1
+
+            # ── Anchos de columna ──────────────────────────────────────
+            col_widths = [42, 18, 18, 20, 14]
+            for i, w in enumerate(col_widths, 1):
+                ws.column_dimensions[get_column_letter(i)].width = w
+
+            # ── Congelar encabezados ───────────────────────────────────
+            ws.freeze_panes = "A4"
+
+            filename = f"finanzas_{self.current_year}_{self.current_month:02d}.xlsx"
             wb.save(filename)
-            QMessageBox.information(
-                self, "Éxito", f"Excel generado:\n{filename}")
+            QMessageBox.information(self, "Éxito", f"Excel generado:\n{filename}")
+
         except Exception as e:
-            QMessageBox.critical(
-                self, "Error", f"Error al generar Excel:\n{str(e)}")
+            QMessageBox.critical(self, "Error", f"Error al generar Excel:\n{str(e)}")
 
     def export_pdf(self):
-        QMessageBox.information(self, "PDF", "Generación de PDF en desarrollo")
+        try:
+            from reportlab.lib.pagesizes import A4
+            from reportlab.lib.units import cm
+            from reportlab.lib import colors
+            from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle,
+                                            Paragraph, Spacer, HRFlowable)
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
+            from pathlib import Path
+
+            # ── Archivo de salida ──────────────────────────────────────
+            filename = f"finanzas_{self.current_year}_{self.current_month:02d}.pdf"
+
+            doc = SimpleDocTemplate(
+                filename, pagesize=A4,
+                rightMargin=2*cm, leftMargin=2*cm,
+                topMargin=2*cm, bottomMargin=2*cm
+            )
+
+            # ── Estilos ────────────────────────────────────────────────
+            C_ORANGE  = colors.HexColor("#FF6B35")
+            C_GREEN   = colors.HexColor("#10B981")
+            C_RED     = colors.HexColor("#EF4444")
+            C_DARK    = colors.HexColor("#1F2937")
+            C_GRAY    = colors.HexColor("#6B7280")
+            C_LGRAY   = colors.HexColor("#F3F4F6")
+            C_WHITE   = colors.white
+            C_PURPLE  = colors.HexColor("#8B5CF6")
+
+            styles = getSampleStyleSheet()
+
+            def style(name, parent="Normal", **kw):
+                return ParagraphStyle(name, parent=styles[parent], **kw)
+
+            s_title    = style("Title2",    fontSize=18, textColor=C_ORANGE,
+                            fontName="Helvetica-Bold", spaceAfter=4, alignment=TA_LEFT)
+            s_subtitle = style("Sub2",      fontSize=10, textColor=C_GRAY,
+                            spaceAfter=16, alignment=TA_LEFT)
+            s_section  = style("Section",   fontSize=10, textColor=C_DARK,
+                            fontName="Helvetica-Bold", spaceBefore=14, spaceAfter=6)
+            s_footer   = style("Footer",    fontSize=8,  textColor=C_GRAY,
+                            alignment=TA_CENTER, spaceBefore=12)
+
+            elements = []
+
+            # ── Encabezado ─────────────────────────────────────────────
+            elements.append(Paragraph(
+                f"Reporte Financiero — {MESES_ES[self.current_month-1]} {self.current_year}",
+                s_title))
+            elements.append(Paragraph(
+                f"Generado el {datetime.now().strftime('%d/%m/%Y a las %H:%M')}  ·  "
+                f"La Placita Cafetería",
+                s_subtitle))
+            elements.append(HRFlowable(width="100%", thickness=1,
+                                    color=C_ORANGE, spaceAfter=12))
+
+            # ── Resumen ejecutivo ──────────────────────────────────────
+            month_str = f"{self.current_year}-{self.current_month:02d}"
+            inc = db.fetch_one(
+                "SELECT COALESCE(SUM(total),0) as total FROM ventas "
+                "WHERE strftime('%Y-%m',fecha_venta)=? AND estado='completada'",
+                (month_str,)
+            )
+            ingresos = float(inc['total']) if inc else 0.0
+
+            cst = db.fetch_one(
+                "SELECT COALESCE(SUM(dv.cantidad*p.costo),0) as total_costo "
+                "FROM detalle_ventas dv "
+                "JOIN productos p ON dv.producto_id=p.id "
+                "JOIN ventas v    ON dv.venta_id=v.id "
+                "WHERE strftime('%Y-%m',v.fecha_venta)=? AND v.estado='completada'",
+                (month_str,)
+            )
+            gastos_prod = float(cst['total_costo']) if cst else 0.0
+
+            costo_fijo, costo_variable = self.costos_card.get_totals()
+            gastos_total = gastos_prod + costo_fijo + costo_variable
+            ganancia     = ingresos - gastos_total
+            margen       = (ganancia / ingresos * 100) if ingresos > 0 else 0.0
+
+            elements.append(Paragraph("Resumen del Período", s_section))
+
+            summary_data = [
+                ["Concepto", "Monto (Bs)"],
+                ["Ingresos Totales",          f"Bs {ingresos:,.2f}"],
+                ["Costos de Productos",        f"Bs {gastos_prod:,.2f}"],
+                ["Costos Fijos",               f"Bs {costo_fijo:,.2f}"],
+                ["Costos Variables",           f"Bs {costo_variable:,.2f}"],
+                ["Total Gastos",               f"Bs {gastos_total:,.2f}"],
+                ["Ganancia Neta",              f"Bs {ganancia:,.2f}"],
+                ["Margen de Ganancia",         f"{margen:.1f}%"],
+            ]
+
+            gan_color = C_GREEN if ganancia >= 0 else C_RED
+            mar_color = C_GREEN if margen   >= 0 else C_RED
+
+            summary_table = Table(summary_data, colWidths=[11*cm, 5*cm])
+            summary_table.setStyle(TableStyle([
+                # Encabezado
+                ("BACKGROUND",  (0,0), (-1,0), C_DARK),
+                ("TEXTCOLOR",   (0,0), (-1,0), C_WHITE),
+                ("FONTNAME",    (0,0), (-1,0), "Helvetica-Bold"),
+                ("FONTSIZE",    (0,0), (-1,0), 9),
+                ("ALIGN",       (1,0), (1,0),  "RIGHT"),
+                # Cuerpo
+                ("FONTSIZE",    (0,1), (-1,-1), 9),
+                ("FONTNAME",    (0,1), (0,-1),  "Helvetica"),
+                ("ALIGN",       (1,1), (1,-1),  "RIGHT"),
+                ("ROWBACKGROUNDS", (0,1), (-1,-1), [C_WHITE, C_LGRAY]),
+                ("TOPPADDING",  (0,0), (-1,-1), 6),
+                ("BOTTOMPADDING",(0,0),(-1,-1), 6),
+                ("LEFTPADDING", (0,0), (-1,-1), 8),
+                ("GRID",        (0,0), (-1,-1), 0.5, colors.HexColor("#E5E7EB")),
+                # Fila Total Gastos — negrita
+                ("FONTNAME",    (0,5), (-1,5), "Helvetica-Bold"),
+                ("TEXTCOLOR",   (1,5), (1,5),  C_RED),
+                # Fila Ganancia — color dinámico
+                ("FONTNAME",    (0,6), (-1,6), "Helvetica-Bold"),
+                ("TEXTCOLOR",   (1,6), (1,6),  gan_color),
+                # Fila Margen
+                ("FONTNAME",    (0,7), (-1,7), "Helvetica-Bold"),
+                ("TEXTCOLOR",   (1,7), (1,7),  mar_color),
+            ]))
+            elements.append(summary_table)
+            elements.append(Spacer(1, 0.5*cm))
+
+            # ── Desglose por producto ──────────────────────────────────
+            elements.append(HRFlowable(width="100%", thickness=0.5,
+                                    color=C_GRAY, spaceAfter=6))
+            elements.append(Paragraph("Desglose por Producto", s_section))
+
+            detail_data = [["Producto", "Unidades", "Ingresos", "Gastos",
+                            "Ganancia", "Margen"]]
+
+            for row in range(self.analysis_table.rowCount()):
+                label_item = self.analysis_table.item(row, 0)
+                if not label_item:
+                    continue
+                label = label_item.text()
+                is_summary = row == 0
+                if is_summary:
+                    continue  # ya está en el resumen
+
+                def get_txt(col):
+                    item = self.analysis_table.item(row, col)
+                    return item.text() if item else ""
+
+                if "📁" in label:
+                    # Fila de categoría — resaltada
+                    clean = label.replace("📁", "").strip()
+                    detail_data.append([clean, "", get_txt(1), get_txt(2),
+                                        get_txt(3), get_txt(4)])
+                else:
+                    # Fila de producto — extraer unidades del label
+                    clean = label.replace("└─", "").strip()
+                    # Las unidades están al final del label entre paréntesis
+                    import re
+                    match = re.search(r'\((\d+) unidades\)', clean)
+                    unidades = match.group(1) if match else "—"
+                    nombre   = re.sub(r'\s*\(\d+ unidades\)', '', clean).strip()
+                    detail_data.append([nombre, unidades, get_txt(1), get_txt(2),
+                                        get_txt(3), get_txt(4)])
+
+            col_widths_detail = [6.5*cm, 1.8*cm, 2.8*cm, 2.8*cm, 2.8*cm, 2*cm]
+            detail_table = Table(detail_data, colWidths=col_widths_detail,
+                                repeatRows=1)
+
+            # Estilo base
+            ts = TableStyle([
+                ("BACKGROUND",   (0,0), (-1,0), C_DARK),
+                ("TEXTCOLOR",    (0,0), (-1,0), C_WHITE),
+                ("FONTNAME",     (0,0), (-1,0), "Helvetica-Bold"),
+                ("FONTSIZE",     (0,0), (-1,-1), 8),
+                ("ALIGN",        (1,0), (-1,-1), "RIGHT"),
+                ("ALIGN",        (0,0), (0,-1),  "LEFT"),
+                ("ROWBACKGROUNDS",(0,1),(-1,-1), [C_WHITE, C_LGRAY]),
+                ("TOPPADDING",   (0,0), (-1,-1), 5),
+                ("BOTTOMPADDING",(0,0), (-1,-1), 5),
+                ("LEFTPADDING",  (0,0), (-1,-1), 6),
+                ("GRID",         (0,0), (-1,-1), 0.3, colors.HexColor("#E5E7EB")),
+            ])
+
+            # Resaltar filas de categoría
+            for i, row_data in enumerate(detail_data[1:], 1):
+                label_val = str(row_data[0])
+                # Detectar si era categoría (sin unidades y sin └─ ya limpiamos)
+                item = self.analysis_table.item(i, 0)  # fila original +1 por summary
+                if item and "📁" in item.text():
+                    ts.add("FONTNAME",   (0,i), (-1,i), "Helvetica-Bold")
+                    ts.add("BACKGROUND", (0,i), (-1,i), colors.HexColor("#E5E7EB"))
+                    ts.add("TEXTCOLOR",  (0,i), (-1,i), C_DARK)
+
+            detail_table.setStyle(ts)
+            elements.append(detail_table)
+
+            # ── Costos registrados ─────────────────────────────────────
+            elements.append(Spacer(1, 0.4*cm))
+            elements.append(HRFlowable(width="100%", thickness=0.5,
+                                    color=C_GRAY, spaceAfter=6))
+            elements.append(Paragraph("Costos Registrados del Período", s_section))
+
+            costos_rows_db = db.fetch_all(
+                "SELECT tipo, concepto, categoria, monto, fecha_gasto "
+                "FROM gastos WHERE strftime('%Y-%m', fecha_gasto)=? "
+                "ORDER BY tipo, fecha_gasto",
+                (month_str,)
+            )
+
+            if costos_rows_db:
+                costos_data = [["Tipo", "Concepto", "Categoría", "Fecha", "Monto"]]
+                for r in costos_rows_db:
+                    tipo = "Fijo" if r['tipo'] == 'fijo' else "Variable"
+                    try:
+                        fecha = datetime.strptime(
+                            r['fecha_gasto'], "%Y-%m-%d").strftime("%d/%m/%Y")
+                    except Exception:
+                        fecha = r['fecha_gasto']
+                    costos_data.append([
+                        tipo,
+                        r['concepto'],
+                        r['categoria'] or "—",
+                        fecha,
+                        f"Bs {float(r['monto']):,.2f}",
+                    ])
+
+                costos_table = Table(
+                    costos_data,
+                    colWidths=[2.2*cm, 6*cm, 3.5*cm, 2.5*cm, 2.5*cm],
+                    repeatRows=1
+                )
+                costos_table.setStyle(TableStyle([
+                    ("BACKGROUND",    (0,0), (-1,0), colors.HexColor("#374151")),
+                    ("TEXTCOLOR",     (0,0), (-1,0), C_WHITE),
+                    ("FONTNAME",      (0,0), (-1,0), "Helvetica-Bold"),
+                    ("FONTSIZE",      (0,0), (-1,-1), 8),
+                    ("ALIGN",         (4,1), (4,-1),  "RIGHT"),
+                    ("ALIGN",         (0,0), (3,-1),  "LEFT"),
+                    ("ROWBACKGROUNDS",(0,1), (-1,-1), [C_WHITE, C_LGRAY]),
+                    ("TOPPADDING",    (0,0), (-1,-1), 5),
+                    ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+                    ("LEFTPADDING",   (0,0), (-1,-1), 6),
+                    ("GRID",          (0,0), (-1,-1), 0.3,
+                    colors.HexColor("#E5E7EB")),
+                ]))
+                elements.append(costos_table)
+            else:
+                elements.append(Paragraph(
+                    "No hay costos registrados para este período.",
+                    style("NoData", fontSize=9, textColor=C_GRAY)))
+
+            # ── Pie de página ──────────────────────────────────────────
+            elements.append(Spacer(1, 0.8*cm))
+            elements.append(HRFlowable(width="100%", thickness=0.5, color=C_LGRAY))
+            elements.append(Paragraph(
+                "La Placita Cafetería  ·  Reporte generado automáticamente  ·  "
+                f"{datetime.now().strftime('%d/%m/%Y')}",
+                s_footer))
+
+            doc.build(elements)
+            QMessageBox.information(self, "Éxito", f"PDF generado:\n{filename}")
+
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Error al generar PDF:\n{str(e)}")

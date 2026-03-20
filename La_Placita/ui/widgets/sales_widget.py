@@ -677,7 +677,7 @@ class SalesWidget(QWidget):
             view_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             view_btn.clicked.connect(lambda checked=False, s=sale: self.view_sale_detail(s))
 
-            print_w, print_btn = self._make_btn_icono("🖨️", "#10B981", "#059669", "#047857")
+            print_w, print_btn = self._make_btn_icono("📄", "#10B981", "#059669", "#047857")
             print_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             print_btn.clicked.connect(lambda checked=False, s=sale: self.print_invoice(s))
 
@@ -976,73 +976,268 @@ class SalesWidget(QWidget):
         sale = Sale.get_by_id(sale_dict['id'])
         if not sale:
             return
-        
+
         dialog = QDialog(self)
-        dialog.setWindowTitle(f"Detalle de Venta - {sale.numero_factura}")
-        dialog.setMinimumSize(600, 500)
-        
+        dialog.setWindowTitle(f"Factura {sale.numero_factura}")
+        dialog.setMinimumSize(560, 520)
+        dialog.setStyleSheet("background-color: #F9FAFB;")
+
         layout = QVBoxLayout(dialog)
-        layout.setSpacing(20)
-        
-        # Header
-        header = QLabel(f"📋 Factura: {sale.numero_factura}")
-        header.setStyleSheet("font-size: 20px; font-weight: 700; color: #1F2937;")
-        layout.addWidget(header)
-        
-        # Info
-        info_text = f"""
-        <b>Fecha:</b> {datetime.fromisoformat(sale.fecha_venta).strftime('%d/%m/%Y %H:%M')}<br>
-        <b>Cliente:</b> {sale.cliente or 'Cliente General'}<br>
-        <b>Método de Pago:</b> {sale.metodo_pago.title()}<br>
-        <b>Estado:</b> {sale.estado.title()}
-        """
-        info_label = QLabel(info_text)
-        info_label.setStyleSheet("font-size: 14px; color: #4B5563; line-height: 1.6;")
-        layout.addWidget(info_label)
-        
-        # Items table
+        layout.setContentsMargins(24, 24, 24, 20)
+        layout.setSpacing(16)
+
+        # ── Encabezado ─────────────────────────────────────────────
+        header_frame = QFrame()
+        header_frame.setStyleSheet("""
+            QFrame {
+                background-color: white;
+                border-radius: 12px;
+                border: 1px solid #E5E7EB;
+            }
+        """)
+        hl = QHBoxLayout(header_frame)
+        hl.setContentsMargins(16, 14, 16, 14)
+
+        left = QVBoxLayout()
+        left.setSpacing(2)
+        factura_lbl = QLabel(sale.numero_factura)
+        factura_lbl.setStyleSheet(
+            "font-size: 18px; font-weight: 800; color: #1F2937;")
+        fecha_lbl = QLabel(
+            datetime.fromisoformat(
+                sale.fecha_venta).strftime("%d/%m/%Y  %H:%M"))
+        fecha_lbl.setStyleSheet("font-size: 12px; color: #6B7280;")
+        left.addWidget(factura_lbl)
+        left.addWidget(fecha_lbl)
+        hl.addLayout(left)
+        hl.addStretch()
+
+        # Badge estado
+        estado_lbl = QLabel(f"  {sale.estado.title()}  ")
+        color_estado = "#10B981" if sale.estado == "completada" else "#F59E0B"
+        estado_lbl.setStyleSheet(f"""
+            background-color: {color_estado}20;
+            color: {color_estado};
+            font-size: 12px; font-weight: 700;
+            border-radius: 8px; padding: 4px 8px;
+            border: 1px solid {color_estado}40;
+        """)
+        hl.addWidget(estado_lbl)
+        layout.addWidget(header_frame)
+
+        # ── Info cliente y pago ────────────────────────────────────
+        info_frame = QFrame()
+        info_frame.setStyleSheet("""
+            QFrame {
+                background-color: white;
+                border-radius: 12px;
+                border: 1px solid #E5E7EB;
+            }
+        """)
+        il = QHBoxLayout(info_frame)
+        il.setContentsMargins(16, 12, 16, 12)
+        il.setSpacing(32)
+
+        def info_col(label, value):
+            col = QVBoxLayout()
+            col.setSpacing(2)
+            lbl = QLabel(label)
+            lbl.setStyleSheet(
+                "font-size: 10px; font-weight: 700; color: #9CA3AF; "
+                "letter-spacing: 0.5px;")
+            val = QLabel(value)
+            val.setStyleSheet("font-size: 13px; font-weight: 600; color: #1F2937;")
+            col.addWidget(lbl)
+            col.addWidget(val)
+            return col
+
+        metodos = {
+            "efectivo": "💵 Efectivo", "qr": "💱 QR",
+            "tarjeta": "💳 Tarjeta",  "mixto": "⚡ Mixto"
+        }
+        il.addLayout(info_col(
+            "CLIENTE", sale.cliente or "Cliente General"))
+        il.addLayout(info_col(
+            "MÉTODO DE PAGO",
+            metodos.get(sale.metodo_pago, sale.metodo_pago.title())))
+        il.addStretch()
+        layout.addWidget(info_frame)
+
+        # ── Tabla de productos ─────────────────────────────────────
         items_table = QTableWidget()
         items_table.setColumnCount(4)
-        items_table.setHorizontalHeaderLabels(["Producto", "Cantidad", "Precio Unit.", "Subtotal"])
-        items_table.setRowCount(len(sale.items))
-        
-        for row, item in enumerate(sale.items):
-            items_table.setItem(row, 0, QTableWidgetItem(item.producto_nombre))
-            items_table.setItem(row, 1, QTableWidgetItem(str(item.cantidad)))
-            items_table.setItem(row, 2, QTableWidgetItem(f"Bs {item.precio_unitario:.2f}"))
-            items_table.setItem(row, 3, QTableWidgetItem(f"Bs {item.subtotal:.2f}"))
-        
+        items_table.setHorizontalHeaderLabels(
+            ["Producto", "Cant.", "Precio Unit.", "Subtotal"])
+        items_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        items_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        items_table.verticalHeader().setVisible(False)
+        items_table.setAlternatingRowColors(True)
+        items_table.setShowGrid(False)
+        items_table.setStyleSheet("""
+            QTableWidget {
+                border: 1px solid #E5E7EB;
+                border-radius: 12px;
+                background-color: white;
+                font-size: 13px;
+                alternate-background-color: #F9FAFB;
+            }
+            QTableWidget::item { padding: 8px 10px; }
+            QHeaderView::section {
+                background-color: #F3F4F6;
+                color: #6B7280; font-weight: 700;
+                font-size: 11px; padding: 8px 10px;
+                border: none; border-bottom: 1px solid #E5E7EB;
+            }
+        """)
+
+        # Agrupar productos repetidos
+        from collections import defaultdict
+        agrupado = {}
+        orden = []
+        for item in sale.items:
+            key = item.producto_nombre
+            if key not in agrupado:
+                agrupado[key] = {"cantidad": 0, "precio": item.precio_unitario,
+                                "subtotal": 0}
+                orden.append(key)
+            agrupado[key]["cantidad"] += item.cantidad
+            agrupado[key]["subtotal"] += item.subtotal
+
+        items_table.setRowCount(len(orden))
+        for row, key in enumerate(orden):
+            vals = agrupado[key]
+            items_table.setItem(row, 0, QTableWidgetItem(key))
+
+            cant = QTableWidgetItem(str(vals["cantidad"]))
+            cant.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            items_table.setItem(row, 1, cant)
+
+            precio = QTableWidgetItem(f"Bs {vals['precio']:,.2f}")
+            precio.setTextAlignment(
+                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            items_table.setItem(row, 2, precio)
+
+            sub = QTableWidgetItem(f"Bs {vals['subtotal']:,.2f}")
+            sub.setTextAlignment(
+                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            sub.setForeground(QColor("#10B981"))
+            sub.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+            items_table.setItem(row, 3, sub)
+            items_table.setRowHeight(row, 40)
+
+        hdr = items_table.horizontalHeader()
+        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+        hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+        hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+        items_table.setColumnWidth(1, 60)
+        items_table.setColumnWidth(2, 110)
+        items_table.setColumnWidth(3, 110)
         layout.addWidget(items_table)
-        
-        # Totals
-        totals_text = f"""
-        <b>Subtotal:</b> Bs {sale.subtotal:.2f}<br>
-        <b>Descuento:</b> Bs {sale.descuento:.2f}<br>
-        <b style="font-size: 18px; color: #10B981;">TOTAL: Bs {sale.total:.2f}</b>
-        """
-        totals_label = QLabel(totals_text)
-        totals_label.setStyleSheet("font-size: 16px; color: #1F2937;")
-        layout.addWidget(totals_label)
-        
-        # Buttons
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
-        buttons.rejected.connect(dialog.reject)
-        layout.addWidget(buttons)
-        
+
+        # ── Totales ────────────────────────────────────────────────
+        totals_frame = QFrame()
+        totals_frame.setStyleSheet("""
+            QFrame {
+                background-color: white;
+                border-radius: 12px;
+                border: 1px solid #E5E7EB;
+            }
+        """)
+        tl = QVBoxLayout(totals_frame)
+        tl.setContentsMargins(16, 12, 16, 12)
+        tl.setSpacing(6)
+
+        def total_row(label, valor, bold=False, color="#4B5563", big=False):
+            row_w = QHBoxLayout()
+            lbl = QLabel(label)
+            lbl.setStyleSheet(
+                f"font-size: {'14' if big else '12'}px; "
+                f"font-weight: {'700' if bold else '500'}; color: #6B7280;")
+            val = QLabel(valor)
+            val.setStyleSheet(
+                f"font-size: {'16' if big else '12'}px; "
+                f"font-weight: {'800' if bold else '500'}; color: {color};")
+            row_w.addStretch()
+            row_w.addWidget(lbl)
+            row_w.addSpacing(24)
+            row_w.addWidget(val)
+            tl.addLayout(row_w)
+
+        total_row("Subtotal:", f"Bs {sale.subtotal:,.2f}")
+        if sale.descuento and sale.descuento > 0:
+            total_row("Descuento:", f"- Bs {sale.descuento:,.2f}", color="#EF4444")
+
+        # Separador
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setStyleSheet("color: #E5E7EB;")
+        tl.addWidget(line)
+
+        total_row("TOTAL:", f"Bs {sale.total:,.2f}",
+                bold=True, color="#10B981", big=True)
+        layout.addWidget(totals_frame)
+
+        # ── Botones ────────────────────────────────────────────────
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+
+        print_btn = QPushButton("🖨️ Imprimir Ticket")
+        print_btn.setFixedHeight(38)
+        print_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #10B981; color: white;
+                border-radius: 8px; font-weight: 600;
+                font-size: 13px; padding: 0 16px;
+            }
+            QPushButton:hover { background-color: #059669; }
+        """)
+        print_btn.clicked.connect(lambda: self._imprimir_ticket(sale))
+        btn_row.addWidget(print_btn)
+
+        close_btn = QPushButton("Cerrar")
+        close_btn.setFixedHeight(38)
+        close_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #1F2937; color: white;
+                border-radius: 8px; font-weight: 600;
+                font-size: 13px; padding: 0 16px;
+            }
+            QPushButton:hover { background-color: #374151; }
+        """)
+        close_btn.clicked.connect(dialog.reject)
+        btn_row.addWidget(close_btn)
+
+        layout.addLayout(btn_row)
         dialog.exec()
-    
     def print_invoice(self, sale_dict):
         sale = Sale.get_by_id(sale_dict['id'])
         if not sale:
             return
         try:
-            filepath = generate_invoice(sale)  # 👈 función de conveniencia
+            filepath = generate_invoice(sale)  
             QMessageBox.information(self, "Éxito", f"Factura generada:\n{filepath}")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error al generar factura:\n{str(e)}")
 
     def print_report(self):
         QMessageBox.information(self, "Imprimir", "Enviando a impresora...")
+    def _imprimir_ticket(self, sale):
+        """Imprime el ticket de la venta en la impresora 58mm"""
+        from utils.printer import imprimir_recibo 
+        ok, msg = imprimir_recibo(
+            sale,
+            nombre_negocio="La Placita",
+            nombre="Cafetería & Heladería",
+            subtitulo="Sucursal Santa Fe",
+            telefono="77113371",
+            mensaje_pie="¡Gracias por su visita!\nVuelva pronto",
+            abrir_cajon=False  
+        )
+        if ok:
+            QMessageBox.information(self, "Éxito", "Ticket impreso correctamente.")
+        else:
+            QMessageBox.critical(self, "Error", f"No se pudo imprimir:\n{msg}")
 
     def generate_pdf(self):
         if not self.current_sales:
@@ -1056,7 +1251,7 @@ class SalesWidget(QWidget):
             sales = [s for s in sales if s is not None]
             
             filename = f"ventas_{fecha_desde}_{fecha_hasta}.pdf"
-            filepath = generate_sales_report(sales, filename, fecha_desde, fecha_hasta)  # 👈
+            filepath = generate_sales_report(sales, filename, fecha_desde, fecha_hasta)  
             
             QMessageBox.information(self, "Éxito", f"Reporte PDF generado:\n{filepath}")
         except Exception as e:
