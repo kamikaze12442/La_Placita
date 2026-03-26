@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve
 from PySide6.QtGui import QPixmap
 from pathlib import Path
+from models.arqueo import ArqueoCaja
 from models.user import get_current_user, logout
 
 SIDEBAR_EXPANDED  = 260
@@ -347,6 +348,7 @@ class MainWindow(QMainWindow):
             self._go(self.settings_page, 8)  # Admin: Configuración es el noveno
         else:
             self._go(self.settings_page, 6)  # Cajero: Configuración es el séptimo
+    
 
     # ── Status bar ────────────────────────────────────────────────────
 
@@ -362,6 +364,37 @@ class MainWindow(QMainWindow):
         sb.addPermanentWidget(ul)
 
     # ── Logout ────────────────────────────────────────────────────────
+    def closeEvent(self, event):
+        arqueo = ArqueoCaja.get_abierto_por_usuario(self.current_user.id)
+
+        
+        if arqueo:
+            reply = QMessageBox.warning(
+                self,
+                "Caja abierta",
+                "La caja sigue abierta.\n¿Seguro que deseas salir sin cerrar la caja?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No  # opción por defecto segura
+            )
+
+            if reply == QMessageBox.StandardButton.Yes:
+                event.accept()  #
+            else:
+                event.ignore()  # 
+            return
+
+        
+        reply = QMessageBox.question(
+            self,
+            "Salir",
+            "¿Está seguro que desea cerrar la aplicación?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            event.accept()
+        else:
+            event.ignore()
 
     def handle_logout(self):
         r = QMessageBox.question(
@@ -369,6 +402,11 @@ class MainWindow(QMainWindow):
             "¿Está seguro que desea cerrar sesión?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if r == QMessageBox.StandardButton.Yes:
+            arqueo = ArqueoCaja.get_abierto_por_usuario(self.current_user.id)
+            if arqueo:
+                QMessageBox.warning(self, "Error", "Debe cerrar la caja antes de salir.")
+                return
+
             logout()
             self.close()
             from ui.login_window import LoginWindow

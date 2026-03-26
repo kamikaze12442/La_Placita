@@ -6,7 +6,7 @@ Main entry point for the application
 import sys
 from pathlib import Path
 from PySide6.QtWidgets import QApplication, QMessageBox, QSplashScreen
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QCoreApplication, Qt, QTimer
 from PySide6.QtGui import QPixmap, QFont, QPalette, QColor
 
 # Add project root to path

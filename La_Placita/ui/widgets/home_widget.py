@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QFrame, QScrollArea, QSizePolicy, QPushButton,
     QStackedWidget, QDateEdit, QToolTip, QApplication,
 )
-from PySide6.QtCore import Qt, QMargins, QDate, QRect, QTimer, QPoint
+from PySide6.QtCore import QCoreApplication, Qt, QMargins, QDate, QRect, QTimer, QPoint
 from PySide6.QtGui import QFont, QPainter, QColor, QPen, QCursor
 from PySide6.QtCharts import (
     QChart, QChartView,
