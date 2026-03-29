@@ -106,6 +106,10 @@ class DatabaseManager:
         add_col("ventas", "monto_efectivo", "DECIMAL(10,2) DEFAULT 0")
         add_col("ventas", "monto_qr",       "DECIMAL(10,2) DEFAULT 0")
         add_col("ventas", "tipo_pedido",    "TEXT DEFAULT 'mesa'")
+        add_col("ventas", "motivo_anulacion", "TEXT DEFAULT NULL")
+        add_col("ventas", "marcada", "TEXT DEFAULT 0")
+        add_col("ventas", "motivo_marca", "TEXT DEFAULT NULL")
+
 
         # productos
         add_col("productos", "disponible", "INTEGER NOT NULL DEFAULT 1")

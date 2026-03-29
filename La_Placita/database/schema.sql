@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS productos (
 );
 
 -- Tabla de Ventas
+-- Tabla de Ventas
 CREATE TABLE IF NOT EXISTS ventas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     numero_factura VARCHAR(20) UNIQUE NOT NULL,
@@ -49,6 +50,12 @@ CREATE TABLE IF NOT EXISTS ventas (
     total DECIMAL(10, 2) NOT NULL,
     metodo_pago VARCHAR(20) NOT NULL CHECK(metodo_pago IN ('efectivo','qr','tarjeta','mixto')),
     estado VARCHAR(20) DEFAULT 'completada',
+    monto_efectivo DECIMAL(10,2) DEFAULT 0,
+    monto_qr DECIMAL(10,2) DEFAULT 0,
+    tipo_pedido TEXT DEFAULT 'mesa',
+    motivo_anulacion TEXT DEFAULT NULL,
+    marcada INTEGER DEFAULT 0,
+    motivo_marca TEXT DEFAULT NULL,
     fecha_venta TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
 );
