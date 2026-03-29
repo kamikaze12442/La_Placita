@@ -257,3 +257,94 @@ def imprimir_prueba() -> tuple:
         return _imprimir_bytes(data)
     except Exception as e:
         return False, f"Error generando prueba: {e}"
+
+
+def _build_ticket_cocina(sale) -> bytes:
+    """Ticket para cocina con ítems, precios, total, cliente y método de pago."""
+    ANCHO = 32
+    buf = bytearray()
+
+    def add(b): buf.extend(b)
+    def linea(t=""): add(_encode(str(t)) + b'\n')
+    def sep(c="-"): add(_encode(c * ANCHO) + b'\n')
+    def fila(izq, der, ancho=ANCHO):
+        espacio = ancho - len(izq) - len(der)
+        linea(izq + " " * max(1, espacio) + der)
+
+    add(INIT)
+    add(ALIGN_CENTER + BOLD_ON + DOUBLE_ON)
+    linea("** COCINA **")
+    add(DOUBLE_OFF + BOLD_OFF)
+
+    fecha = datetime.fromisoformat(
+        sale.fecha_venta).strftime("%d/%m/%Y  %H:%M")
+    linea(f"Factura: {sale.numero_factura}")
+    linea(fecha)
+
+    tipo = getattr(sale, 'tipo_pedido', 'mesa')
+    tipo_label = "PARA LLEVAR" if tipo == "llevar" else "EN MESA"
+    add(BOLD_ON)
+    linea(tipo_label)
+    add(BOLD_OFF)
+
+    sep("=")
+    add(ALIGN_LEFT)
+    linea(f"Cliente : {sale.cliente or 'Cliente General'}")
+    metodos = {
+        "efectivo": "Efectivo",
+        "qr":       "QR",
+        "tarjeta":  "Tarjeta",
+        "mixto":    "Mixto",
+    }
+    linea(f"Pago    : {metodos.get(sale.metodo_pago, sale.metodo_pago.title())}")
+    sep()
+
+    add(BOLD_ON)
+    linea(f"{'Producto':<18}{'Cant':>4}{'Total':>10}")
+    add(BOLD_OFF)
+    sep()
+
+    # Agrupar
+    agrupado = {}
+    orden = []
+    for item in sale.items:
+        key = item.producto_nombre
+        if key not in agrupado:
+            agrupado[key] = {"cantidad": 0, "precio": item.precio_unitario,
+                             "subtotal": 0}
+            orden.append(key)
+        agrupado[key]["cantidad"] += item.cantidad
+        agrupado[key]["subtotal"] += item.subtotal
+
+    for key in orden:
+        vals = agrupado[key]
+        nombre_prod = key[:17]
+        cant  = str(vals["cantidad"])
+        total = f"Bs {vals['subtotal']:.2f}"
+        linea(f"{nombre_prod:<18}{cant:>4}{total:>10}")
+        if vals["cantidad"] > 1:
+            linea(f"  @ Bs {vals['precio']:.2f} c/u")
+
+    sep("=")
+    add(ALIGN_RIGHT + BOLD_ON + DOUBLE_ON)
+    linea(f"TOTAL: Bs {sale.total:.2f}")
+    add(DOUBLE_OFF + BOLD_OFF + ALIGN_LEFT)
+    sep("=")
+
+    add(ALIGN_CENTER)
+    linea("Preparar pedido")
+    add(FEED_3 + CUT)
+
+    return bytes(buf)
+
+
+def imprimir_ticket_cocina(sale) -> tuple:
+    """
+    Imprime ticket simplificado para cocina.
+    Solo muestra ítems y cantidades, sin precios ni totales.
+    """
+    try:
+        data = _build_ticket_cocina(sale)
+        return _imprimir_bytes(data)
+    except Exception as e:
+        return False, f"Error generando ticket cocina: {e}"
