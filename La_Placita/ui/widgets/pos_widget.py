@@ -4,7 +4,7 @@ Métodos de pago: Efectivo / QR / Mixto
 """
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
+    QDialog, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QPushButton, QLabel, QLineEdit, QTableWidget, QTableWidgetItem,
     QComboBox, QSpinBox, QDoubleSpinBox, QMessageBox, QFrame,
     QScrollArea, QHeaderView, QButtonGroup, QAbstractItemView
@@ -702,9 +702,26 @@ class POSWidget(QWidget):
                 "El módulo de impresión no está instalado.\n"
                 "Ejecuta: pip install pywin32")
             return
-        ok, msg = imprimir_recibo(sale)
+        from ui.widgets.settings_widget import _get_config
+        abrir = (
+            _get_config("abrir_cajon_auto", "0") == "1"
+            and getattr(sale, 'metodo_pago', '') in ('efectivo', 'mixto')
+        )
+        ok, msg = imprimir_recibo(sale, abrir_cajon=abrir)
         if not ok:
             QMessageBox.warning(self, "Error de impresión", msg)
+
+    def _print_cocina(self, sale):
+        """Imprime ticket de cocina (sin precios, solo ítems)."""
+        if not PRINTER_OK:
+            return
+        try:
+            from utils.printer import imprimir_ticket_cocina
+            ok, msg = imprimir_ticket_cocina(sale)
+            if not ok:
+                QMessageBox.warning(self, "Error impresión cocina", msg)
+        except Exception as e:
+            QMessageBox.warning(self, "Error impresión cocina", str(e))
 
     # ── Completar venta ───────────────────────────────────────────────
 
@@ -721,28 +738,44 @@ class POSWidget(QWidget):
             self.update_totals()
             return
 
-        cliente = self.client_input.text().strip() or "Cliente General"
-        method  = self._current_method()
+        cliente     = self.client_input.text().strip() or "Cliente General"
+        method      = self._current_method()
+        tipo_pedido = self._current_tipo()
+        tipo_emoji  = "🥡" if tipo_pedido == "llevar" else "🍽️"
+        tipo_label  = "Para llevar" if tipo_pedido == "llevar" else "En mesa"
+        subtotal    = sum(i.precio_unitario * i.cantidad for i in self.cart_items)
 
-        # Calcular montos por método para ventas mixtas
         monto_efectivo = 0.0
         monto_qr       = 0.0
         if method == "mixto":
             monto_efectivo = self._eff_spin.value()
             monto_qr       = self._qr_spin.value()
 
-        tipo_pedido = self._current_tipo()
-
-        resultado = Sale.create(
-            usuario_id=self.current_user.id,
-            items=self.cart_items,
-            cliente=cliente,
-            metodo_pago=method,
-            monto_efectivo=monto_efectivo,
-            monto_qr=monto_qr,
-            tipo_pedido=tipo_pedido,
+        # ── 1. Mostrar diálogo de confirmación ANTES de crear la venta ───
+        dlg = ConfirmarVentaDialog(
+            items      = self.cart_items,
+            subtotal   = subtotal,
+            method     = method,
+            tipo_label = tipo_label,
+            tipo_emoji = tipo_emoji,
+            cliente    = cliente,
+            parent     = self
         )
-        # Compatibilidad: sale.py nuevo devuelve (sale_id, alertas), viejo devuelve int
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return  # Cancelado — no se toca la BD
+
+        imprimir = dlg.quiere_imprimir()
+
+        # ── 2. Recién aquí se crea la venta ──────────────────────────────
+        resultado = Sale.create(
+            usuario_id     = self.current_user.id,
+            items          = self.cart_items,
+            cliente        = cliente,
+            metodo_pago    = method,
+            monto_efectivo = monto_efectivo,
+            monto_qr       = monto_qr,
+            tipo_pedido    = tipo_pedido,
+        )
         if isinstance(resultado, tuple):
             sale_id, alertas_stock = resultado
         else:
@@ -753,51 +786,38 @@ class POSWidget(QWidget):
                 "No se pudo completar la venta. Intente nuevamente.")
             return
 
-        sale  = Sale.get_by_id(sale_id)
-        total = sale.total
+        # ── 3. Imprimir según configuración ──────────────────────────────
+        sale = Sale.get_by_id(sale_id)
+        from ui.widgets.settings_widget import _get_config
 
-        tipo_emoji = "🥡" if tipo_pedido == "llevar" else "🍽️"
-        tipo_label = "Para llevar" if tipo_pedido == "llevar" else "En mesa"
-        msg = (f"✅ Venta completada exitosamente!\n\n"
-               f"Factura: {sale.numero_factura}\n"
-               f"Total:   Bs {total:.2f}\n"
-               f"Tipo:    {tipo_emoji} {tipo_label}\n")
+        ticket_cliente = _get_config("imprimir_ticket_cliente", "1") == "1"
+        ticket_cocina  = _get_config("imprimir_ticket_cocina",  "0") == "1"
 
-        if method == "efectivo":
-            rec    = self._eff_spin.value()
-            cambio = max(rec - total, 0)
-            if rec > 0:
-                msg += f"Recibido: Bs {rec:.2f}\n"
-                msg += f"Cambio:   Bs {cambio:.2f}\n"
-        elif method == "mixto":
-            eff    = self._eff_spin.value()
-            qr     = self._qr_spin.value()
-            cambio = max((eff + qr) - total, 0)
-            msg += f"Efectivo: Bs {eff:.2f}\n"
-            msg += f"QR:       Bs {qr:.2f}\n"
-            if cambio > 0:
-                msg += f"Cambio:   Bs {cambio:.2f}\n"
-        else:
-            msg += f"Método:  {method.title()}\n"
-
-        reply = QMessageBox.question(
-            self, "Venta Completada",
-            msg + "\n🖨️ ¿Desea imprimir el recibo?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.Yes
-        )
-        if reply == QMessageBox.StandardButton.Yes:
+        # Primero imprimir ticket cliente
+        if imprimir and ticket_cliente:
             self._print_receipt(sale)
 
-        # ── Alertas de stock bajo / agotado ───────────────────────────
+        # Luego preguntar por cocina si está habilitado
+        if ticket_cocina:
+            reply = QMessageBox.question(
+                self, "🍽️ Ticket de Cocina",
+                f"¿Imprimir ticket de cocina?\n\n"
+                f"Factura: {sale.numero_factura}",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self._print_cocina(sale)
+
+        # ── 4. Alertas de stock ───────────────────────────────────────────
         if alertas_stock:
             self._mostrar_alertas_stock(alertas_stock)
 
+        # ── 5. Limpiar carrito ────────────────────────────────────────────
         self.cart_items.clear()
         self.client_input.clear()
         self._eff_spin.setValue(0)
         self._qr_spin.setValue(0)
-        # Resetear tipo a "mesa"
         for btn in self._tipo_group.buttons():
             if btn.property("tipo_key") == "mesa":
                 btn.setChecked(True)
@@ -858,3 +878,152 @@ class POSWidget(QWidget):
         lay.addWidget(btn, alignment=Qt.AlignmentFlag.AlignRight)
 
         dlg.exec()
+# ── Confirmación personalizada ANTES de crear la venta ───────────
+class ConfirmarVentaDialog(QDialog):
+    def __init__(self, items, subtotal, method, tipo_label, tipo_emoji, cliente, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Confirmar Venta")
+        self.setFixedWidth(420)
+        self.setStyleSheet("background:white;")
+        self._imprimir = False  # se define al pulsar el botón
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 20)
+        layout.setSpacing(16)
+
+        # ── Header ───────────────────────────────────────────────────
+        header = QHBoxLayout()
+        icon = QLabel("🧾")
+        icon.setStyleSheet("font-size:28px;")
+        header.addWidget(icon)
+        title = QLabel("Confirmar Venta")
+        title.setStyleSheet("font-size:18px; font-weight:800; color:#1F2937;")
+        header.addWidget(title)
+        header.addStretch()
+        layout.addLayout(header)
+
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setStyleSheet("color:#E5E7EB;")
+        layout.addWidget(sep)
+
+        # ── Pills info ────────────────────────────────────────────────
+        meta = QHBoxLayout()
+        for emoji, txt in [("👤", cliente), (tipo_emoji, tipo_label),
+                            ("💳", method.title())]:
+            pill = QLabel(f"{emoji} {txt}")
+            pill.setStyleSheet("""
+                background:#F3F4F6; color:#374151;
+                border-radius:8px; padding:4px 10px;
+                font-size:12px; font-weight:600;
+            """)
+            meta.addWidget(pill)
+        meta.addStretch()
+        layout.addLayout(meta)
+
+        # ── Tabla items ───────────────────────────────────────────────
+        items_frame = QFrame()
+        items_frame.setStyleSheet("""
+            QFrame { background:#F9FAFB; border:1px solid #E5E7EB;
+                     border-radius:10px; }
+        """)
+        items_lay = QVBoxLayout(items_frame)
+        items_lay.setContentsMargins(14, 10, 14, 10)
+        items_lay.setSpacing(6)
+
+        hdr = QHBoxLayout()
+        for txt, align in [("Producto",  Qt.AlignmentFlag.AlignLeft),
+                            ("Cant.",     Qt.AlignmentFlag.AlignCenter),
+                            ("Subtotal",  Qt.AlignmentFlag.AlignRight)]:
+            l = QLabel(txt)
+            l.setStyleSheet("font-size:11px; font-weight:700; color:#9CA3AF;")
+            l.setAlignment(align)
+            hdr.addWidget(l)
+        items_lay.addLayout(hdr)
+
+        sep2 = QFrame()
+        sep2.setFrameShape(QFrame.Shape.HLine)
+        sep2.setStyleSheet("color:#E5E7EB;")
+        items_lay.addWidget(sep2)
+
+        for i in items:
+            row = QHBoxLayout()
+            nombre = QLabel(i.producto_nombre)
+            nombre.setStyleSheet("font-size:13px; color:#1F2937; font-weight:500;")
+            nombre.setAlignment(Qt.AlignmentFlag.AlignLeft)
+            cant = QLabel(f"×{i.cantidad}")
+            cant.setStyleSheet("font-size:13px; color:#6B7280;")
+            cant.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            sub = QLabel(f"Bs {i.precio_unitario * i.cantidad:.2f}")
+            sub.setStyleSheet("font-size:13px; color:#1F2937; font-weight:600;")
+            sub.setAlignment(Qt.AlignmentFlag.AlignRight)
+            row.addWidget(nombre, stretch=3)
+            row.addWidget(cant,   stretch=1)
+            row.addWidget(sub,    stretch=2)
+            items_lay.addLayout(row)
+
+        layout.addWidget(items_frame)
+
+        # ── Total ─────────────────────────────────────────────────────
+        total_row = QHBoxLayout()
+        total_lbl = QLabel("TOTAL")
+        total_lbl.setStyleSheet("font-size:13px; font-weight:700; color:#6B7280;")
+        total_val = QLabel(f"Bs {subtotal:.2f}")
+        total_val.setStyleSheet("font-size:22px; font-weight:800; color:#10B981;")
+        total_row.addWidget(total_lbl)
+        total_row.addStretch()
+        total_row.addWidget(total_val)
+        layout.addLayout(total_row)
+
+        sep3 = QFrame()
+        sep3.setFrameShape(QFrame.Shape.HLine)
+        sep3.setStyleSheet("color:#E5E7EB;")
+        layout.addWidget(sep3)
+
+        # ── 3 botones fijos ───────────────────────────────────────────
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+
+        def make_btn(texto, bg, hover, pressed):
+            b = QPushButton(texto)
+            b.setFixedHeight(40)
+            b.setStyleSheet(f"""
+                QPushButton {{
+                    background: {bg};
+                    color: white;
+                    border: none;
+                    border-radius: 9px;
+                    font-size: 13px;
+                    font-weight: 600;
+                    padding: 0 14px;
+                }}
+                QPushButton:hover   {{ background: {hover}; }}
+                QPushButton:pressed {{ background: {pressed}; }}
+            """)
+            return b
+
+        btn_cancelar  = make_btn("✕Cancelar",          "#6B7280", "#4B5563", "#374151")
+        btn_sin_impr  = make_btn("Confirmar",          "#10B981", "#059669", "#047857")
+        btn_con_impr  = make_btn("Confirmar + 🖨️", "#3B82F6", "#2563EB", "#1D4ED8")
+
+        btn_cancelar.clicked.connect(self.reject)
+        btn_sin_impr.clicked.connect(self._confirmar_sin_imprimir)
+        btn_con_impr.clicked.connect(self._confirmar_con_imprimir)
+        btn_con_impr.setDefault(True)  # Enter = confirmar + imprimir
+
+        btn_row.addWidget(btn_cancelar)
+        btn_row.addStretch()
+        btn_row.addWidget(btn_sin_impr)
+        btn_row.addWidget(btn_con_impr)
+        layout.addLayout(btn_row)
+
+    def _confirmar_sin_imprimir(self):
+        self._imprimir = False
+        self.accept()
+
+    def _confirmar_con_imprimir(self):
+        self._imprimir = True
+        self.accept()
+
+    def quiere_imprimir(self):
+        return self._imprimir

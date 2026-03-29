@@ -283,10 +283,10 @@ class MainWindow(QMainWindow):
             self.users_page = UsersWidget()
             self.stacked_widget.addWidget(self.users_page)
 
-        # Página de configuración (todos) - asumiendo que existe
-        """ from ui.widgets.settings_widget import SettingsWidget
+        # Página de configuración (todos)
+        from ui.widgets.settings_widget import SettingsWidget
         self.settings_page = SettingsWidget()
-        self.stacked_widget.addWidget(self.settings_page) """
+        self.stacked_widget.addWidget(self.settings_page)
 
     def create_home_page(self):
         from ui.widgets.home_widget import HomeWidget

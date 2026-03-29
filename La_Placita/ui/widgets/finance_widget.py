@@ -17,6 +17,7 @@ from database.connection import db
 from utils.excel_exporter import ExcelExporter
 from utils.pdf_generator import InvoiceGenerator
 import calendar
+from pathlib import Path
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -245,6 +246,7 @@ class AddCostDialog(QDialog):
             QDialogButtonBox.StandardButton.Cancel
         )
         btn_box.button(QDialogButtonBox.StandardButton.Save).setText("💾 Guardar")
+        btn_box.button(QDialogButtonBox.StandardButton.Save).setDefault(True)
         btn_box.button(QDialogButtonBox.StandardButton.Cancel).setText("Cancelar")
         btn_box.accepted.connect(self._validate_and_accept)
         btn_box.rejected.connect(self.reject)
@@ -810,7 +812,7 @@ class FinanceWidget(QWidget):
         hl = QHBoxLayout()
 
         title = QLabel("📊 Análisis Financiero")
-        title.setStyleSheet("font-size: 20px; font-weight: 700; color: #1F2937;")
+        title.setStyleSheet("font-size: 20px; font-weight: 700; color: #1F2937; border: none")
         hl.addWidget(title)
         hl.addStretch()
 
@@ -923,7 +925,7 @@ class FinanceWidget(QWidget):
 
     def _lbl(self, text):
         l = QLabel(text)
-        l.setStyleSheet("font-weight: 600; color: #4B5563;")
+        l.setStyleSheet("font-weight: bold; color: #4B5563;border: none")
         return l
 
     def _load_categories(self):
@@ -1260,6 +1262,7 @@ class FinanceWidget(QWidget):
     # ── Exportar ──────────────────────────────────────────────────────
 
     def export_excel(self):
+        filename = None
         try:
             from openpyxl import Workbook
             from openpyxl.styles import Font, PatternFill, Alignment, Border, Side, numbers
@@ -1426,7 +1429,13 @@ class FinanceWidget(QWidget):
             # ── Congelar encabezados ───────────────────────────────────
             ws.freeze_panes = "A4"
 
-            filename = f"finanzas_{self.current_year}_{self.current_month:02d}.xlsx"
+            output_dir = Path.home() / 'Desktop' / 'La Placita' / 'Reportes Finanzas Excel'
+            output_dir.mkdir(parents=True, exist_ok=True)
+            if not filename:
+                filename = str(output_dir / f"finanzas_{self.current_year}_{self.current_month:02d}.xlsx")
+            else:
+                filename = str(output_dir / Path(filename).name)
+
             wb.save(filename)
             QMessageBox.information(self, "Éxito", f"Excel generado:\n{filename}")
 
@@ -1434,6 +1443,7 @@ class FinanceWidget(QWidget):
             QMessageBox.critical(self, "Error", f"Error al generar Excel:\n{str(e)}")
 
     def export_pdf(self):
+        filename = None
         try:
             from reportlab.lib.pagesizes import A4
             from reportlab.lib.units import cm
@@ -1442,10 +1452,16 @@ class FinanceWidget(QWidget):
                                             Paragraph, Spacer, HRFlowable)
             from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
             from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
-            from pathlib import Path
+            
 
             # ── Archivo de salida ──────────────────────────────────────
-            filename = f"finanzas_{self.current_year}_{self.current_month:02d}.pdf"
+
+            output_dir = Path.home() / 'Desktop' / 'La Placita' / 'Reportes Finanzas PDF'
+            output_dir.mkdir(parents=True, exist_ok=True)
+            if not filename:
+                filename = str(output_dir / f"finanzas_{self.current_year}_{self.current_month:02d}.pdf")
+            else:
+                filename = str(output_dir / Path(filename).name)
 
             doc = SimpleDocTemplate(
                 filename, pagesize=A4,

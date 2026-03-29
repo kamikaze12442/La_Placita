@@ -66,14 +66,14 @@ class AbrirCajaDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Abrir Caja")
         self.setFixedWidth(400)
-        self.setStyleSheet("background:white;")
+        self.setStyleSheet("background:white; border: none")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(16)
 
         # Header
         title = QLabel("🟢  Apertura de Caja")
-        title.setStyleSheet("font-size:17px; font-weight:700; color:#1F2937;")
+        title.setStyleSheet("font-size:17px; font-weight:700; color:#1F2937;  border: none")
         layout.addWidget(title)
 
         sep = QFrame()
@@ -83,7 +83,7 @@ class AbrirCajaDialog(QDialog):
 
         # Info
         info = QLabel("Se registrará tu usuario y la hora de inicio.\nTodas las ventas de este turno quedarán asociadas a este arqueo.")
-        info.setStyleSheet("color:#6B7280; font-size:12px; line-height:1.5;")
+        info.setStyleSheet("color:#6B7280; font-size:12px; line-height:1.5;  border: none")
         info.setWordWrap(True)
         layout.addWidget(info)
 
@@ -94,7 +94,7 @@ class AbrirCajaDialog(QDialog):
         fondo_lay.setContentsMargins(14, 12, 14, 12)
 
         fondo_lbl = QLabel("Fondo inicial en caja")
-        fondo_lbl.setStyleSheet("font-size:12px; font-weight:600; color:#6B7280;")
+        fondo_lbl.setStyleSheet("font-size:12px; font-weight:600; color:#6B7280;  border: none")
         fondo_lay.addWidget(fondo_lbl)
 
         self.monto_inicial = QDoubleSpinBox()
@@ -115,6 +115,7 @@ class AbrirCajaDialog(QDialog):
         cancel_btn.clicked.connect(self.reject)
         ok_btn = QPushButton("🟢  Abrir Caja")
         ok_btn.setStyleSheet(BTN_PRIMARY)
+        ok_btn.setDefault(True)
         ok_btn.clicked.connect(self.accept)
         btn_row.addWidget(cancel_btn)
         btn_row.addWidget(ok_btn)
@@ -138,7 +139,7 @@ class CerrarCajaDialog(QDialog):
         self.setWindowTitle("Cierre de Caja")
         self.setMinimumSize(1020, 660)
         self.resize(1060, 700)
-        self.setStyleSheet("QDialog { background:#F8FAFC; } QLabel { background:transparent; }")
+        self.setStyleSheet("QDialog { background:#F8FAFC;border: none } QLabel { background:transparent; border: none }")
         self._init_ui()
         self._update_totals()
 
@@ -156,12 +157,12 @@ class CerrarCajaDialog(QDialog):
         tb.setSpacing(10)
 
         title = QLabel("🔴  Cierre de Caja")
-        title.setStyleSheet("font-size:15px; font-weight:700; color:white;")
+        title.setStyleSheet("font-size:15px; font-weight:700; color:white;border: none")
         tb.addWidget(title)
 
         inicio = self.arqueo.fecha_inicio[:16].replace('T', ' ')
         sub = QLabel(f"·  Turno iniciado el {inicio}")
-        sub.setStyleSheet("font-size:12px; color:#64748B;")
+        sub.setStyleSheet("font-size:12px; color:#64748B; border: none")
         tb.addWidget(sub)
         tb.addStretch()
         root.addWidget(top_bar)
@@ -190,14 +191,14 @@ class CerrarCajaDialog(QDialog):
         disp_text.setSpacing(3)
         disp_cap = QLabel("EFECTIVO CONTADO")
         disp_cap.setStyleSheet(
-            "font-size:10px; font-weight:700; color:#94A3B8; letter-spacing:1px;")
+            "font-size:10px; font-weight:700; color:#94A3B8; letter-spacing:1px;border: none")
         disp_text.addWidget(disp_cap)
         self._ef_display = QLabel("Bs 0.00")
         self._ef_display.setStyleSheet(
-            "font-size:30px; font-weight:800; color:#1E293B;")
+            "font-size:30px; font-weight:800; color:#1E293B; border: none")
         disp_text.addWidget(self._ef_display)
         self._ef_detalle = QLabel("Sin conteo aún")
-        self._ef_detalle.setStyleSheet("font-size:11px; color:#94A3B8;")
+        self._ef_detalle.setStyleSheet("font-size:11px; color:#94A3B8;border: none")
         self._ef_detalle.setWordWrap(True)
         disp_text.addWidget(self._ef_detalle)
         disp_lay.addLayout(disp_text)
@@ -225,7 +226,7 @@ class CerrarCajaDialog(QDialog):
 
         bill_cap = QLabel("BILLETES")
         bill_cap.setStyleSheet(
-            "font-size:10px; font-weight:700; color:#94A3B8; letter-spacing:1px;")
+            "font-size:10px; font-weight:700; color:#94A3B8; letter-spacing:1px;border: none")
         dc_lay.addWidget(bill_cap)
 
         bill_row = QHBoxLayout()
@@ -236,7 +237,7 @@ class CerrarCajaDialog(QDialog):
 
         mon_cap = QLabel("MONEDAS")
         mon_cap.setStyleSheet(
-            "font-size:10px; font-weight:700; color:#94A3B8; letter-spacing:1px;")
+            "font-size:10px; font-weight:700; color:#94A3B8; letter-spacing:1px;border: none")
         dc_lay.addWidget(mon_cap)
 
         mon_row = QHBoxLayout()
@@ -258,9 +259,9 @@ class CerrarCajaDialog(QDialog):
         qr_info = QVBoxLayout()
         qr_info.setSpacing(2)
         qr_title = QLabel("📱  QR — monto recibido en el turno")
-        qr_title.setStyleSheet("font-size:13px; font-weight:600; color:#1E293B;")
+        qr_title.setStyleSheet("font-size:13px; font-weight:600; color:#1E293B;border: none")
         qr_sub = QLabel("Ingresa el total cobrado por QR")
-        qr_sub.setStyleSheet("font-size:11px; color:#94A3B8;")
+        qr_sub.setStyleSheet("font-size:11px; color:#94A3B8;border: none")
         qr_info.addWidget(qr_title)
         qr_info.addWidget(qr_sub)
         qr_lay.addLayout(qr_info)
@@ -353,7 +354,7 @@ class CerrarCajaDialog(QDialog):
 
         dif_cap = QLabel("DIFERENCIAS  (conteo − sistema)")
         dif_cap.setStyleSheet(
-            "font-size:10px; font-weight:700; color:#94A3B8; letter-spacing:1px;")
+            "font-size:10px; font-weight:700; color:#94A3B8; letter-spacing:1px;border: none")
         dif_lay.addWidget(dif_cap)
         dif_lay.addSpacing(10)
 
@@ -364,11 +365,11 @@ class CerrarCajaDialog(QDialog):
             row = QHBoxLayout()
             row.setContentsMargins(0, 5, 0, 5)
             k = QLabel(f"{emoji}  {label}")
-            k.setStyleSheet("font-size:13px; color:#64748B;")
+            k.setStyleSheet("font-size:13px; color:#64748B;border: none")
             row.addWidget(k)
             row.addStretch()
             vl = QLabel("—")
-            vl.setStyleSheet("font-size:13px; font-weight:700; color:#94A3B8;")
+            vl.setStyleSheet("font-size:13px; font-weight:700; color:#94A3B8;border: none")
             row.addWidget(vl)
             self._dif_labels[key] = vl
             dif_lay.addLayout(row)
@@ -546,17 +547,17 @@ class CajaActualTab(QWidget):
         cc.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         lk = QLabel("🔒")
-        lk.setStyleSheet("font-size:40px;")
+        lk.setStyleSheet("font-size:40px;border: none")
         lk.setAlignment(Qt.AlignmentFlag.AlignCenter)
         cc.addWidget(lk)
 
         lk2 = QLabel("Caja cerrada")
-        lk2.setStyleSheet("font-size:18px; font-weight:700; color:#1F2937;")
+        lk2.setStyleSheet("font-size:18px; font-weight:700; color:#1F2937;border: none")
         lk2.setAlignment(Qt.AlignmentFlag.AlignCenter)
         cc.addWidget(lk2)
 
         lk3 = QLabel("No hay turno activo. Abre la caja\npara comenzar a registrar ventas.")
-        lk3.setStyleSheet("font-size:13px; color:#6B7280; line-height:1.5;")
+        lk3.setStyleSheet("font-size:13px; color:#6B7280; line-height:1.5;border: none")
         lk3.setAlignment(Qt.AlignmentFlag.AlignCenter)
         cc.addWidget(lk3)
 
@@ -587,7 +588,7 @@ class CajaActualTab(QWidget):
         sb = QHBoxLayout(self._status_bar)
         sb.setContentsMargins(16, 10, 16, 10)
         self._status_lbl = QLabel("")
-        self._status_lbl.setStyleSheet("font-size:13px; color:#065F46;")
+        self._status_lbl.setStyleSheet("font-size:13px; color:#065F46;border: none")
         sb.addWidget(self._status_lbl)
         sb.addStretch()
         self._btn_cerrar = QPushButton("🔴  Cerrar Caja")
@@ -613,7 +614,7 @@ class CajaActualTab(QWidget):
         ]:
             card = QFrame()
             card.setStyleSheet(f"""
-                QFrame {{ background:{bg}; border:1px solid {border};
+                QFrame {{ background:{bg}; border: none;
                           border-radius:12px; }}
             """)
             cl = QVBoxLayout(card)
@@ -698,7 +699,6 @@ class CajaActualTab(QWidget):
             return
         uid = self._usuario_id
         if not uid:
-            from PySide6.QtWidgets import QMessageBox
             QMessageBox.critical(self, "Error de sesion",
                 "No se pudo identificar al usuario.\n"
                 "Cierra la aplicacion y vuelve a abrir.")
@@ -713,16 +713,21 @@ class CajaActualTab(QWidget):
             return
         dialog = CerrarCajaDialog(self._arqueo_actual, self)
         if dialog.exec():
-            ef, qr, tar, denoms = dialog.get_data()
-            resultado = ArqueoCaja.cerrar(
-                self._arqueo_actual.id, ef, qr, tar, denoms)
-            if resultado:
-                dif = resultado.diferencia_total
-                QMessageBox.information(
-                    self, "Caja Cerrada",
-                    f"✅ Caja cerrada correctamente.\n\n"
-                    f"Diferencia total: {_texto_dif(dif)}")
-                self.refresh()
+            r = QMessageBox.question(
+            self, "Cerrar Caja",
+            "¿Está seguro que desea cerrar caja?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if r == QMessageBox.StandardButton.Yes:
+                ef, qr, tar, denoms = dialog.get_data()
+                resultado = ArqueoCaja.cerrar(
+                    self._arqueo_actual.id, ef, qr, tar, denoms)
+                if resultado:
+                    dif = resultado.diferencia_total
+                    QMessageBox.information(
+                        self, "Caja Cerrada",
+                        f"✅ Caja cerrada correctamente.\n\n"
+                        f"Diferencia total: {_texto_dif(dif)}")
+                    self.refresh()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -853,7 +858,7 @@ class HistorialArqueosTab(QWidget):
 
         det_cap = QLabel("DETALLE DEL ARQUEO")
         det_cap.setStyleSheet(
-            "font-size:10px; font-weight:700; color:#94A3B8; letter-spacing:1px;")
+            "font-size:10px; font-weight:700; color:#94A3B8; letter-spacing:1px; border: none")
         dp.addWidget(det_cap)
         dp.addSpacing(12)
 
@@ -876,7 +881,7 @@ class HistorialArqueosTab(QWidget):
             if key.startswith("sep"):
                 sep = QFrame()
                 sep.setFrameShape(QFrame.Shape.HLine)
-                sep.setStyleSheet("color:#F1F5F9; margin:8px 0;")
+                sep.setStyleSheet("color:#F1F5F9; margin:8px 0;border: none")
                 dp.addWidget(sep)
                 continue
             row_w = QWidget()
@@ -885,11 +890,11 @@ class HistorialArqueosTab(QWidget):
             rlay.setContentsMargins(0, 5, 0, 5)
             rlay.setSpacing(6)
             k = QLabel(f"{emoji}  {label}")
-            k.setStyleSheet("font-size:12px; color:#64748B;")
+            k.setStyleSheet("font-size:12px; color:#64748B;border: none")
             rlay.addWidget(k)
             rlay.addStretch()
             v = QLabel("—")
-            v.setStyleSheet("font-size:12px; font-weight:700; color:#1E293B;")
+            v.setStyleSheet("font-size:12px; font-weight:700; color:#1E293B;border: none")
             v.setAlignment(Qt.AlignmentFlag.AlignRight)
             rlay.addWidget(v)
             self._det_rows[key] = v

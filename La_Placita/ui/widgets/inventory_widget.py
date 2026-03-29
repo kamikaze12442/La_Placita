@@ -370,7 +370,9 @@ class InsumoDialog(QDialog):
 
         br = QHBoxLayout(); br.setContentsMargins(0, 8, 0, 0)
         c = _btn_ghost("Cancelar"); c.clicked.connect(self.reject)
-        ok = _btn("💾  Guardar", C_PRIMARY); ok.clicked.connect(self._ok)
+        ok = _btn("💾  Guardar", C_PRIMARY)
+        ok.setDefault(True)
+        ok.clicked.connect(self._ok)
         br.addWidget(c); br.addStretch(); br.addWidget(ok)
         lay.addLayout(br)
 
@@ -685,6 +687,7 @@ class MovimientoDialog(QDialog):
         br = QHBoxLayout()
         c = _btn_ghost("Cancelar"); c.clicked.connect(self.reject)
         self._btn_ok = _btn("✅  Registrar", C_GREEN)
+        self._btn_ok.setDefault(True)
         self._btn_ok.clicked.connect(self.accept)
         br.addWidget(c); br.addStretch(); br.addWidget(self._btn_ok)
         lay.addLayout(br)
@@ -871,7 +874,9 @@ class RecetaDialog(QDialog):
 
         br = QHBoxLayout()
         c = _btn_ghost("Cancelar"); c.clicked.connect(self.reject)
-        ok = _btn("💾  Guardar Receta", C_PRIMARY); ok.clicked.connect(self.accept)
+        ok = _btn("💾  Guardar Receta", C_PRIMARY)
+        ok.setDefault(True)
+        ok.clicked.connect(self.accept)
         br.addWidget(c); br.addStretch(); br.addWidget(ok)
         lay.addLayout(br)
 
@@ -1260,7 +1265,9 @@ class NuevaCompraDialog(QDialog):
         fl = QHBoxLayout(footer); fl.setContentsMargins(28,16,28,16); fl.setSpacing(12)
         fl.addStretch()
         btn_c = _btn_ghost("Cancelar"); btn_c.clicked.connect(self.reject)
-        btn_ok = _btn("✅  Confirmar compra", C_PRIMARY); btn_ok.clicked.connect(self._ok)
+        btn_ok = _btn("✅  Confirmar compra", C_PRIMARY)
+        btn_ok.setDefault(True)
+        btn_ok.clicked.connect(self._ok)
         fl.addWidget(btn_c); fl.addWidget(btn_ok)
         root.addWidget(footer)
 
@@ -1397,6 +1404,7 @@ class NuevaCompraDialog(QDialog):
 
     def _upd_preview(self):
         ins = self._ins()
+        unidad_txt=""
         if ins is None:
             self._prev_frame.setVisible(False); return
 
@@ -2070,8 +2078,6 @@ class ComprasTab(QWidget):
         limpiar.clicked.connect(self._limpiar); bl.addWidget(limpiar)
         nb = _btn("➕ Nueva Compra", C_PRIMARY, small=True)
         nb.clicked.connect(self._nueva); bl.addWidget(nb)
-        rf = _btn_ghost("🔄"); rf.setFixedWidth(36)
-        rf.clicked.connect(self.load_data); bl.addWidget(rf)
         lay.addWidget(bar)
 
         self.table = _make_table(

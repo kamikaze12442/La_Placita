@@ -204,6 +204,14 @@ def _make_date_edit(default_offset: int = 0, focus_bg: str = "#EFF6FF") -> QDate
     cal = de.calendarWidget()
     cal.setStyleSheet(CALENDAR_QSS)
     cal.setVerticalHeaderFormat(cal.VerticalHeaderFormat.NoVerticalHeader)
+
+    popup_frame = cal.parentWidget()
+    if popup_frame:
+        popup_frame.setStyleSheet(
+            "background-color: white;"
+            "border: 1px solid #E5E7EB;"
+            "border-radius: 10px;"
+        )
     return de
 
 
